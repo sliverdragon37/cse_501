@@ -1,16 +1,19 @@
 #!/bin/bash
 
 START_PATH="/home/emullen/Dropbox/grad_cs/501/start"
+REPO_PATH="/home/emullen/Dropbox/grad_cs/501/cse_501"
 
 FILE=$1
 
 IR=${FILE%.*}.sir
 
+OPT=${FILE%.*}.opt
+
 #grab and compile to IR
 dart $START_PATH/bin/start.dart -c $FILE > $IR
 
 #run our script to optimize the IR
-#nothing at the moment
+scala $REPO_PATH/hw1/code/main $IR $OPT
 
 #run the IR
-dart $START_PATH/bin/start.dart -r $IR
+dart $START_PATH/bin/start.dart -r $OPT
