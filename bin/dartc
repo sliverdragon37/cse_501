@@ -1,16 +1,16 @@
 #!/bin/bash
 
-START_PATH='~/Dropbox/grad_cs/501/start'
+START_PATH="/home/emullen/Dropbox/grad_cs/501/start"
 
 FILE=$1
 
 IR=${FILE%.*}.sir
 
 #grab and compile to IR
-dart $(START_PATH)/bin/start.dart -c $FILE > $IR
+dart $START_PATH/bin/start.dart -c $FILE > $IR
 
 #run our script to optimize the IR
 #nothing at the moment
 
 #run the IR
-dart $(START_PATH)/bin/start.dart -r $IR
+dart $START_PATH/bin/start.dart -r $IR
