@@ -10,9 +10,9 @@ object main {
     val infname = args(0)
     val inlines:Iterator[String] = Source.fromFile(infname).getLines
 
-    //val IR = inlines.map(parse)
+    val IR = inlines.map(SIRParser.runParser)
 
-    val outlines = inlines //optimize(IR).map(_.toString)
+    val outlines = IR.map(_.toString)
     outlines.foreach(println)
   }
 }
