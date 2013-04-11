@@ -4,7 +4,7 @@ trait SIR {
 
 }
 
-trait Param {
+trait Operand {
 
 }
 
@@ -26,15 +26,23 @@ case object IntType extends PrimitiveType with NumberT
 case object BoolType extends PrimitiveType with BooleanT
 
 
-case class Register(n:Int) extends Param
-case class Immediate(n:Int) extends Param
+case class Register(n:Int) extends Operand
+case class Immediate(n:Int) extends Operand
 
-case class Enter(bytes:Param) extends SIR
+//program and method entry
+case class Enter(bytes:Operand) extends SIR
 case object EntryPC extends SIR
+
+//branch instructions
+case class Br(dest:Operand) extends SIR
+case class Blbc(reg:Operand,dest:Operand) extends SIR
+case class Blbs(reg:Operand,dest:operand) extends SIR
+case class Call(fun:Operand) extends SIR
+case class Ret(bytes:Operand) extends SIR
 //...
 
-
 case class Method(instrs:List[SIR],name:String,args:List[IRType],locals:List[IRType])
+
 
 
 
