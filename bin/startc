@@ -13,7 +13,7 @@ OPT=${FILE%.*}.opt
 dart $START_PATH/bin/start.dart -c $FILE > $IR
 
 #run our script to optimize the IR
-scala $REPO_PATH/hw1/code/main $IR $OPT
+scala -classpath $REPO_PATH/hw1/code main $IR $OPT
 
 #run the IR
 dart $START_PATH/bin/start.dart -r $OPT
