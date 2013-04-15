@@ -26,6 +26,8 @@ case class Register(n:Int) extends Operand
 case class Immediate(n:Int) extends Operand
 case class Local(s:String,n:Int) extends Operand
 case class Location(n:Int) extends Operand
+case object GlobalPointer extends Operand
+case object FramePointer extends Operand
 
 trait SIR {
   var num:Int = -1

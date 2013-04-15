@@ -12,6 +12,9 @@ OPT=${FILE%.*}.opt
 #grab and compile to IR
 dart $START_PATH/bin/start.dart -c $FILE > $IR
 
+#get rid of the output file
+rm $OPT
+
 #run our script to optimize the IR
 scala -classpath $REPO_PATH/hw1/code main $IR > $OPT
 

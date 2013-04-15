@@ -8,11 +8,13 @@ object main {
 
     //first arg input file, second output
     val infname = args(0)
-    val inlines:Iterator[String] = Source.fromFile(infname).getLines
+    val inlines = Source.fromFile(infname).getLines.toList
 
-    val IR = inlines.map(SIRParser.runParser)
+    val I = inlines.dropRight(1)
+    val IR = I.map(SIRParser.runParser)
 
     val outlines = IR.map(_.toString)
-    outlines.foreach(println)
+
+    //outlines.foreach(println)
   }
 }
