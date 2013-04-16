@@ -88,7 +88,7 @@ object SIRParser extends StandardTokenParsers {
     p match {
       case Success(r,_) => {
         println(in)
-        println(r)
+        //println(r)
         r
       }
       case _ => throw new RuntimeException("bad parse on input: " + in)
