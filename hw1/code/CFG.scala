@@ -86,7 +86,7 @@ class Block(pStart:Int, pEnd:Int, pName:String, pBlocks:ListBuffer[Block]){
     otherBlock.preds.remove(otherBlock.preds.indexOf(this))
   }
 
-  override def toString:String = "(" + name + ", " + start + ", " + end + ")"
+  override def toString:String = start.toString
 }
 
 
@@ -142,10 +142,11 @@ class CFG(header:MethodDeclaration, pEnd:Int, instrMap:HashMap[Int,SIR]){
   }
 
   override def toString:String = {
-    var list:ListBuffer[Block] = getTopoList()
-    var str:String = "[" + list.length + ",\n"
-    list.foreach(b => str += b + ": { " + b.succs+ "}\n")
-    str += "]"
+    if (list == null){
+      list = getTopoList()
+    }
+    var str:String = name + "\n"
+    list.foreach(b => str += ("# " + b.start + "\n\t"  + "Preds: " + b.preds.toList.mkString(", ") + "\n\t" + "Succs: " + b.succs.toList.mkString(", ") + "\n\t" + "idom: " + b.idom + "\n"))
     str
   }
 }

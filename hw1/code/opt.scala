@@ -19,5 +19,7 @@ object main {
 
     var CFGs = CFGFactory.makeAllCFGs(IR)
     CFGs.foreach(cfg => dom.find_dominator(cfg))
+
+    CFGs.foreach(cfg => println(cfg))
   }
 }
