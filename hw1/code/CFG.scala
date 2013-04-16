@@ -33,7 +33,7 @@ class Block(pStart:Int, pEnd:Int, pName:String, pBlocks:ListBuffer[Block]){
     this.replaceEdges(newBlock)
     this.addEdge(newBlock)
     newBlock
-}
+  }
 
   def findBlock(branchTo:Int) = {
     var i:Int = 0
