@@ -15,6 +15,9 @@ object main {
 
     val outlines = IR.map(_.toString)
 
-    //outlines.foreach(println)
+    outlines.foreach(println)
+
+    var CFGs = CFGFactory.makeAllCFGs(IR)
+    CFGs.foreach(cfg => dom.find_dominator(cfg))
   }
 }

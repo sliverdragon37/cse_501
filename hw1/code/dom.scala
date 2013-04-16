@@ -81,7 +81,7 @@ object dom {
     }
   }
 
-  def run_test() {
+/*  def run_test() {
 
     var l = new ListBuffer[Block]()
 
@@ -119,6 +119,5 @@ object dom {
     for (block <- List(a,b,c,d,e,f,g,h)) {
       println(block.name + " has idom: " + block.idom.name)
     }
-  }
-
+  }*/
 }
