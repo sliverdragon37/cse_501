@@ -2,8 +2,15 @@ import scala.util.parsing.combinator.syntactical._
 
 object SIRParser extends StandardTokenParsers {
 
-  lexical.reserved ++= List("type","method","global","instr",
-    "List","Integer","Boolean","dynamic","int","bool","GP","FP")
+  val instrs = List("br","blbs","blbc","call","ret","nop")
+  val keywords = List("type","method","global","instr")
+  val types = List("List","Integer","Boolean","dynamic","int","bool")
+  val regs = List("GP","FP")
+
+  lexical.reserved ++= instrs
+  lexical.reserved ++= keywords
+  lexical.reserved ++= types
+  lexical.reserved ++= regs
 
   lexical.delimiters ++= List(":","[","]","#","(",")","*","@","-","_","?")
 
@@ -81,6 +88,7 @@ object SIRParser extends StandardTokenParsers {
     p match {
       case Success(r,_) => {
         println(in)
+        println(r)
         r
       }
       case _ => throw new RuntimeException("bad parse on input: " + in)
