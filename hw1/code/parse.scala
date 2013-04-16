@@ -5,7 +5,7 @@ object SIRParser extends StandardTokenParsers {
   lexical.reserved ++= List("type","method","global","instr",
     "List","Integer","Boolean","dynamic","int","bool","GP","FP")
 
-  lexical.delimiters ++= List(":","[","]","#","(",")","*","@","-")
+  lexical.delimiters ++= List(":","[","]","#","(",")","*","@","-","_","?")
 
   type Arg = (String,Int,IRType)
 
@@ -32,11 +32,12 @@ object SIRParser extends StandardTokenParsers {
     op
   }}
 
+  def id:Parser[String] = rep(ident | "_") ^^ { case l => l.foldLeft("")(_+_) }
 
   def oparg:Parser[Operand] = reg | imm | loc | gp | fp | local
   def reg = "(" ~> numLit <~ ")" ^^ { case n => Register(n) }
   def imm = numLit ^^ { case n => Immediate(n) }
-  def local = ident ~ "#" ~ numLit ^^ { case s ~ _ ~ n => Local(s,n) }
+  def local = ident ~ "#" ~ (numLit ^^ {case n => Some(n)} | "?" ^^ {case _ => None}) ^^ { case s ~ _ ~ n => Local(s,n) }
   def loc = "[" ~> numLit <~ "]" ^^ { case n => Location(n) }
   def gp = "GP" ^^ { case _ => GlobalPointer }
   def fp = "FP" ^^ { case _ => FramePointer }
