@@ -8,6 +8,8 @@ class Block(pStart:Int, pEnd:Int, pName:String, pBlocks:ListBuffer[Block]){
   pBlocks.append(this)
   var preds:ListBuffer[Block] = new ListBuffer[Block]()
   var succs:ListBuffer[Block] = new ListBuffer[Block]()
+  var idom:Block = null
+  var idom_level:Int = -1
 
   def handleBranch(instrLoc:Int, branchTo:Int){
     // handle splitting this block
@@ -68,7 +70,7 @@ class Block(pStart:Int, pEnd:Int, pName:String, pBlocks:ListBuffer[Block]){
 
 class CFG(){
   var root:Block = new Block(1, 10, "Root", new ListBuffer[Block])
-  var list:ListBuffer[Block] = new ListBuffer[Block]
+  var list:ListBuffer[Block] = null
 
   def addBranch(instrLoc:Int, branchTo:Int){
     root.findBlock(instrLoc).handleBranch(instrLoc, branchTo)
@@ -76,19 +78,24 @@ class CFG(){
   }
 
   def getTopoList() = {
-    var workList:Queue[Block] = new Queue[Block]()
-    var finalList:ListBuffer[Block] = new ListBuffer[Block]()
-    var block:Block = null
 
-    workList.enqueue(root)
-    while (!workList.isEmpty){
-      block = workList.dequeue
-      finalList.append(block)
+    if (list == null) {
 
-      block.succs.foreach{b => if(!finalList.contains(b) && !workList.contains(b)){workList.enqueue(b)}}
+      var workList:Queue[Block] = new Queue[Block]()
+      var finalList:ListBuffer[Block] = new ListBuffer[Block]()
+      var block:Block = null
+
+      workList.enqueue(root)
+      while (!workList.isEmpty){
+        block = workList.dequeue
+        finalList.append(block)
+
+        block.succs.foreach{b => if(!finalList.contains(b) && !workList.contains(b)){workList.enqueue(b)}}
+      }
+
+      list = finalList
     }
-
-    finalList
+    list
   }
 
   override def toString:String = {
