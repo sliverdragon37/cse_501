@@ -87,7 +87,7 @@ object SIRParser extends StandardTokenParsers {
     val p = phrase(opcode)(tokens)
     p match {
       case Success(r,_) => {
-        //println(in)
+        println(in)
         //println(r)
         r
       }

@@ -13,7 +13,8 @@ OPT=${FILE%.*}.opt
 dart $START_PATH/bin/start.dart -c $FILE > $IR
 
 #get rid of the output file
-rm $OPT
+#-f for silent (doesn't complain when file not there)
+rm -f $OPT
 
 #run our script to optimize the IR
 scala -classpath $REPO_PATH/hw1/code main $IR > $OPT

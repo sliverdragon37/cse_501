@@ -13,11 +13,19 @@ object main {
     val I = inlines.dropRight(1)
     val IR = I.map(SIRParser.runParser)
 
-    val outlines = IR.map(_.toString)
 
-    outlines.foreach(println)
+    //IR.foreach(println(_.toString))
 
-    var CFGs = CFGFactory.makeAllCFGs(IR)
+    val CFGs = CFGFactory.makeAllCFGs(IR)
+
+
+    //start time
+    val start = System.nanoTime
     CFGs.foreach(cfg => dom.find_dominator(cfg))
+
+    //end time
+    val end = System.nanoTime
+
+    System.err.println("Finding dominators took " + (end-start) + " nanoseconds")
   }
 }
