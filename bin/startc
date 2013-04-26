@@ -2,6 +2,7 @@
 
 START_PATH="/home/emullen/Dropbox/grad_cs/501/start"
 REPO_PATH="/home/emullen/Dropbox/grad_cs/501/cse_501"
+HW="hw2"
 
 FILE=$1
 
@@ -17,7 +18,7 @@ dart $START_PATH/bin/start.dart -c $FILE > $IR
 rm -f $OPT
 
 #run our script to optimize the IR
-scala -classpath $REPO_PATH/hw1/code main $IR > $OPT
+scala -classpath $REPO_PATH/$HW/code main $IR $OPT
 
 #run the IR
 dart $START_PATH/bin/start.dart -r $OPT
