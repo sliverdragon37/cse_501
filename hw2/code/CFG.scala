@@ -90,7 +90,7 @@ class Block(pStart:Int, pEnd:Int, pName:String, pBlocks:ListBuffer[Block]){
 }
 
 
-class CFG(header:MethodDeclaration, pEnd:Int, instrMap:HashMap[Int,SIR with Instr]){
+class CFG(header:MethodDeclaration, pEnd:Int, instrMap:HashMap[Int,SIR]){
   var root:Block = new Block(header.start, pEnd-1, "Root", new ListBuffer[Block])
   var name:String = header.name
   var start:Int = header.start
@@ -98,7 +98,7 @@ class CFG(header:MethodDeclaration, pEnd:Int, instrMap:HashMap[Int,SIR with Inst
   instrMap.values.foreach(instr => handleInstr(instr, instrMap))
   var list:ListBuffer[Block] = getTopoList
 
-  def handleInstr(instr:SIR with Instr, instrMap:HashMap[Int,SIR with Instr]){
+  def handleInstr(instr:SIR, instrMap:HashMap[Int,SIR]){
     instr match {
       case br: Br => addBranch(br.num, resolveOperand(br.dest), false, instrMap)
       case blbc: Blbc => addBranch(blbc.num, resolveOperand(blbc.dest), true, instrMap)
@@ -113,11 +113,13 @@ class CFG(header:MethodDeclaration, pEnd:Int, instrMap:HashMap[Int,SIR with Inst
      case i: Immediate => i.n
      case l: Local => -1
      case l: Location => l.n
+     case fp: FramePointer => -1
+     case gp: GlobalPointer => -1
     }
   }
 
 
-  def addBranch(instrLoc:Int, branchTo:Int, conditional:Boolean, instrMap:HashMap[Int,SIR with Instr]){
+  def addBranch(instrLoc:Int, branchTo:Int, conditional:Boolean, instrMap:HashMap[Int,SIR]){
     instrMap(branchTo-1) match {
       case br: Br => root.findBlock(instrLoc).handleBranch(instrLoc, branchTo, conditional, true)
       case o: Object => root.findBlock(instrLoc).handleBranch(instrLoc, branchTo, conditional, false)
@@ -141,7 +143,7 @@ class CFG(header:MethodDeclaration, pEnd:Int, instrMap:HashMap[Int,SIR with Inst
     finalList
   }
 
-  def getStats:String = {
+  override def toString:String = {
     if (list == null){
       list = getTopoList()
     }
@@ -152,7 +154,7 @@ class CFG(header:MethodDeclaration, pEnd:Int, instrMap:HashMap[Int,SIR with Inst
 }
 
 object CFGFactory{
-  def makeAllCFGs(sirList:List[Either[SIR with Instr, Declaration]]) = {
+  def makeAllCFGs(sirList:List[Either[SIR, Declaration]]) = {
 
     // find the method headers and get start points
     var headerList =  sirList.filter(elem => elem.isRight).map(elem => elem.right.get)
@@ -164,7 +166,7 @@ object CFGFactory{
     methodEnds.append(instrList.length)
 
     var CFGs = new ListBuffer[CFG]
-    var instrHashMap = new HashMap[Int, SIR with Instr]
+    var instrHashMap = new HashMap[Int, SIR]
     var i = 0
     for(i <- 0 to methodList.length -1){
       instrHashMap.clear
