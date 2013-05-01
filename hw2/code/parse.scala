@@ -55,7 +55,7 @@ object SIRParser extends StandardTokenParsers {
       ("blbc" ~> oparg ~ loc ^^ {case o ~ l => Blbc(o,l)}) |
       ("blbs" ~> oparg ~ loc ^^ {case o ~ l => Blbs(o,l)}) |
       ("call" ~> loc ^^ {case l => Call(l)}) |
-      ("nop" ^^ {case _ => Nop}) |
+      ("nop" ^^ {case _ => Nop()}) |
       ("add" ~> oparg ~ oparg ~ ":" ~ typ ^^ {case a1 ~ a2 ~ _ ~ t => Add(a1,a2,t) }) |
       ("sub" ~> oparg ~ oparg ~ ":" ~ typ ^^ {case a1 ~ a2 ~ _ ~ t => Sub(a1,a2,t) }) |
       ("mul" ~> oparg ~ oparg ~ ":" ~ typ ^^ {case a1 ~ a2 ~ _ ~ t => Mul(a1,a2,t) }) |
@@ -78,7 +78,7 @@ object SIRParser extends StandardTokenParsers {
       ("lddynamic" ~> oparg ~ oparg ~ ":" ~ typ ^^ {case a1 ~ a2 ~ _ ~ t => Lddynamic(a1,a2,t) }) |
       ("stdynamic" ~> oparg ~ oparg ^^ {case a1 ~ a2 => Stdynamic(a1,a2) }) |
       ("write" ~> oparg ^^ {case a => Write(a) }) |
-      ("wrl" ^^ {case _ => Wrl }) |
+      ("wrl" ^^ {case _ => Wrl() }) |
       ("enter" ~> imm ^^ {case n => Enter(n)}) |
       ("ret" ~> imm ^^ {case n => Ret(n)}) |
       ("param" ~> oparg ^^ {case o => Param(o)}) |

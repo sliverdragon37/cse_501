@@ -18,10 +18,10 @@ object main {
     val IR = I.map(SIRParser.runParser)
 
     //get just the instructions
-    val instrs = util.toRight(IR)
+    val headers = util.toRight(IR)
 
     //get just the headers
-    val headers = util.toLeft(IR)
+    val instrs = util.toLeft(IR)
 
     //each CFG is a control flow graph for a method
     //made up of a list of basic blocks
@@ -44,9 +44,7 @@ object main {
 
     val out_file = new java.io.FileOutputStream(outfname)
     val out_stream = new java.io.PrintStream(out_file)
-    headers.map(_.toString).map(_+"\n").foreach(out_stream.print(_))
-    instrs.map(_.toString).map(_+"\n").foreach(out_stream.print(_))
+    (headers ++ instrs).map(_.toString).map(_+"\n").foreach(out_stream.print(_))
     out_stream.close
-
   }
 }

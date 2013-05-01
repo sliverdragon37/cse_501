@@ -1,15 +1,15 @@
 
-trait Operand {
+sealed trait Operand {
 }
 
-trait IRType {
+sealed trait IRType {
 
 }
 
-trait PrimitiveType extends IRType
-trait BoxedType extends IRType
-trait NumberT
-trait BooleanT
+sealed trait PrimitiveType extends IRType
+sealed trait BoxedType extends IRType
+sealed trait NumberT
+sealed trait BooleanT
 
 case object ListType extends BoxedType { override def toString = "List" }
 case object IntegerType extends BoxedType with NumberT { override def toString = "Int" }
@@ -35,25 +35,26 @@ case class Location(n:Int) extends Operand { override def toString = "[" + n + "
 case object GlobalPointer extends Operand { override def toString = "GP" }
 case object FramePointer extends Operand { override def toString = "FP" }
 
-trait SIR {
+sealed trait SIR {
 
 }
 
-trait Instr {
+sealed trait Instr {
   //instruction number
   var num:Int = -1
   def repr:String
-  override def toString = "instr " + num.toString + ": " + repr
+  override def toString = "    instr " + num.toString + ": " + repr
 }
 
-trait Declaration {
-
+sealed trait Declaration {
+  def argToS(v:(String,Int,IRType)):String = v._1 + "#" + v._2 + ":" + v._3 
+  def argsToS(lv:List[(String,Int,IRType)]):String = lv.map(argToS(_) + " ").foldLeft("")(_+_)
 }
 
 //IR header info
-case class TypeDeclaration(name:String,args:List[(String,Int,IRType)]) extends Declaration
-case class MethodDeclaration(name:String,start:Int,paramsAndLocals:List[(String,Int,IRType)]) extends Declaration
-case class GlobalDeclaration(v:(String,Int,IRType)) extends Declaration
+case class TypeDeclaration(name:String,args:List[(String,Int,IRType)]) extends Declaration { override def toString = "    type " + name + ": " + argsToS(args) }
+case class MethodDeclaration(name:String,start:Int,paramsAndLocals:List[(String,Int,IRType)]) extends Declaration { override def toString = "    method " + name + "@" + start + ": " + argsToS(paramsAndLocals) }
+case class GlobalDeclaration(v:(String,Int,IRType)) extends Declaration { override def toString = "    global " + argToS(v) }
 
 //program and method entry
 case class Enter(bytes:Operand) extends SIR with Instr { def repr = "enter " + bytes }
@@ -65,7 +66,7 @@ case class Blbc(reg:Operand,dest:Operand) extends SIR with Instr { def repr = "b
 case class Blbs(reg:Operand,dest:Operand) extends SIR with Instr { def repr = "blbs " + reg + " " + dest }
 case class Call(fun:Operand) extends SIR with Instr { def repr = "call " + fun }
 case class Ret(bytes:Operand) extends SIR with Instr { def repr = "ret " + bytes }
-case object Nop extends SIR with Instr { def repr = "nop" }
+case class Nop() extends SIR with Instr { def repr = "nop" }
 
 case class Add(a:Operand,b:Operand,t:IRType) extends SIR with Instr { def repr = "add " + a + " " + b + " :" + t }
 case class Sub(a:Operand,b:Operand,t:IRType) extends SIR with Instr { def repr = "sub " + a + " " + b + " :" + t }
@@ -89,7 +90,7 @@ case class Checkbounds(a:Operand,b:Operand) extends SIR with Instr { def repr = 
 case class Lddynamic(a:Operand,b:Operand,t:IRType) extends SIR with Instr { def repr = "lddynamic " + a + " " + b + " :" + t }
 case class Stdynamic(a:Operand,b:Operand) extends SIR with Instr { def repr = "stdynamic " + a + " " + b }
 case class Write(a:Operand) extends SIR with Instr { def repr = "write " + a }
-case object Wrl extends SIR with Instr { def repr = "wrl" }
+case class Wrl() extends SIR with Instr { def repr = "wrl" }
 case class Param(a:Operand) extends SIR with Instr { def repr = "param " + a }
 
 
