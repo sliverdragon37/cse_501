@@ -113,6 +113,8 @@ class CFG(header:MethodDeclaration, pEnd:Int, instrMap:HashMap[Int,SIR]){
      case i: Immediate => i.n
      case l: Local => -1
      case l: Location => l.n
+     case fp: FramePointer => -1
+     case gp: GlobalPointer => -1
     }
   }
 
