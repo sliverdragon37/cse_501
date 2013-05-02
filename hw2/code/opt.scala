@@ -6,7 +6,7 @@ object main {
 
   def main(args:Array[String]) {
 
-    //first arg input file, second output
+    //first arg input file name, second output file name
     val infname = args(0)
     val inlines = Source.fromFile(infname).getLines.toList
 
@@ -14,19 +14,18 @@ object main {
 
     val I = inlines.dropRight(1)
 
-    //intermediate representation
+    //parse intermediate representation
     val IR = I.map(SIRParser.runParser)
 
-    //get just the instructions
+    //get just the headers
     val headers = util.toRight(IR)
 
-    //get just the headers
+    //get just the instructions
     val instrs = util.toLeft(IR)
 
     //each CFG is a control flow graph for a method
     //made up of a list of basic blocks
-    val CFGs = CFGFactory.makeAllCFGs(IR)
-
+    val CFGs = CFGFactory.makeAllCFGs(headers,instrs)
 
     //time finding dominators
     //start time
@@ -36,12 +35,22 @@ object main {
     //end time
     val end = System.nanoTime
 
+    //finalize cfg construction
+    //moves CFGs from start,end representation to
+    //List[Instr] notation
+    CFGs.foreach(_.finishConstruction)
+
+    //convert each CFG to SSA
+    CFGs.foreach(_.toSSA)
+
+    //print out the SSA representation
+    CFGs.foreach(_.printSSA)
 
     //print the stats about CFGs
     //CFGs.foreach(System.err.println(_.getStats))
-
     //System.err.println("Finding dominators took " + (end-start) + " nanoseconds")
 
+    //write the optimized code back out to file
     val out_file = new java.io.FileOutputStream(outfname)
     val out_stream = new java.io.PrintStream(out_file)
     (headers ++ instrs).map(_.toString).map(_+"\n").foreach(out_stream.print(_))
