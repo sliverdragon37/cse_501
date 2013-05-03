@@ -1,4 +1,5 @@
 import scala.collection.mutable._
+import scala.collection.immutable
 
 class Block(pStart:Int, pEnd:Int, pName:String, pBlocks:ListBuffer[Block]){
   //used for initialization
@@ -9,9 +10,13 @@ class Block(pStart:Int, pEnd:Int, pName:String, pBlocks:ListBuffer[Block]){
   pBlocks.append(this)
   var preds:ListBuffer[Block] = new ListBuffer[Block]()
   var succs:ListBuffer[Block] = new ListBuffer[Block]()
+
+  //parent in the idom tree
   var idom:Block = null
   var idom_level:Int = -1
-  var needs_phi:Boolean = false
+
+  //children in the idom tree
+  var children:ListBuffer[Block] = new ListBuffer[Block]()
 
   //code represented like this once CFG is made
   var instrs:ListBuffer[SIR with Instr] = null
@@ -20,15 +25,41 @@ class Block(pStart:Int, pEnd:Int, pName:String, pBlocks:ListBuffer[Block]){
   var instrsSSA:ListBuffer[SSA] = null
 
   def printSSA = {
-    println("Block: " + name)
+    println(name)
     instrsSSA.foreach(println)
     println()
   }
 
-  def finishConstruction(iMap:HashMap[Int,SIR with Instr]) = {
-    //grab all instructions and add them to our list of instrs
+  def firstInstrLocation = {
+    if (instrs != null) {
+      instrs.head.num
+    } else {
+      start
+    }
+  }
+
+  def finishConstruction(iMap:HashMap[Int,SIR with Instr],bMap:immutable.Map[Int,Block]) = {
+    //grab all instructions but the final branch and add them to our list of instrs
     instrs = new ListBuffer[SIR with Instr]()
-    (start to end).foreach({i => instrs.append(iMap(i))})
+    (start to (end - 1)).foreach({i => instrs.append(iMap(i))})
+
+    //fix up the final branch to point to a block, not an instr number
+    val newEnd = iMap(end) match {
+      //is an explicit branch at the end of this block
+      case Br(Location(n)) => Br(Dest(bMap(n)))
+      case Blbc(a,Location(n)) => Blbc(a,Dest(bMap(n)))
+      case Blbs(a,Location(n)) => Blbs(a,Dest(bMap(n)))
+      case r:Ret => r
+        //there is no explicit branch, just fall through
+        //add an explicit branch to next block
+      case x:SIR => {
+        instrs.append(x)
+        Br(Dest(bMap(end + 1)))
+      }
+    }
+    newEnd.num = iMap(end).num
+    instrs.append(newEnd)
+    
   }
 
   //convert a single basic block to SSA
@@ -47,7 +78,7 @@ class Block(pStart:Int, pEnd:Int, pName:String, pBlocks:ListBuffer[Block]){
     }
     //turn all instrs into SSA versions
     def convert(instr:SIR with Instr):SSA = {
-      instr match {
+      val ssa = instr match {
         case Enter(a) => Enter(use(a))
         case Entrypc => Entrypc
         case Br(a) => Br(use(a))
@@ -81,6 +112,8 @@ class Block(pStart:Int, pEnd:Int, pName:String, pBlocks:ListBuffer[Block]){
         case Wrl() => Wrl()
         case Param(a) => Param(use(a))
       }
+      ssa.num = instr.num
+      ssa
     }
 
     instrsSSA = instrs.map(convert)
@@ -183,13 +216,41 @@ class CFG(header:MethodDeclaration, pEnd:Int, instrMap:HashMap[Int,SIR with Inst
     val frontier:HashMap[Block,HashSet[Block]] = new HashMap[Block,HashSet[Block]]()
 
     //loop through dominator tree in bottom up order
+    val bottom_up = list.reverse
+
+    bottom_up.foreach({b => {
+      if (b.idom != b) {
+        b.idom.children.append(b)
+      }
+    }})
+
+    bottom_up.foreach({b => {
+      frontier.insert(b -> new HashSet[Block]())
+      b.succs.foreach({s => {
+        if (!(s.idom == b)) {
+          frontier(b).add(s)
+        }
+      }})
+      b.children.foreach({c => {
+        frontier(c).foreach({y => {
+          if (y.idom != b) {
+            frontier(b).add(y)
+          }
+        }})
+      }})
+    }})
+
+    //now dominance frontier is calculated
+    //insert phi nodes
+
 
     list.foreach(_.toSSA)
 
   }
 
   def finishConstruction = {
-    list.foreach(_.finishConstruction(instrMap))
+    val blockMap = list.map(b => b.firstInstrLocation -> b).toMap
+    list.foreach(_.finishConstruction(instrMap,blockMap))
   }
 
   def handleInstr(instr:SIR with Instr, instrMap:HashMap[Int,SIR with Instr]){
@@ -203,13 +264,9 @@ class CFG(header:MethodDeclaration, pEnd:Int, instrMap:HashMap[Int,SIR with Inst
 
   def resolveOperand(op:Operand) = {
     op match{
-      case r: Register => -1
       case i: Immediate => i.n
-      case l: Local => -1
       case l: Location => l.n
-      case FramePointer => -1
-      case GlobalPointer => -1
-      case l:SSALocal => -1
+      case _ => -1
     }
   }
 
@@ -255,16 +312,16 @@ object CFGFactory{
 
     // find the method headers and get start points
     val methodList = headers collect { case m: MethodDeclaration => m}
-    val methodEnds = methodList.map(elem => elem.start).drop(1).to[ListBuffer]
-    methodEnds.append(instrList.length)
+    val methodEnds = (methodList.map(elem => elem.start).drop(1) ++ List(instrList.length)).toArray
 
     var CFGs = new ListBuffer[CFG]
-    var i = 0
-    for(i <- 0 to methodList.length -1){
-      var instrHashMap = new HashMap[Int, SIR with Instr]
-      instrList.drop(methodList(i).start-1).dropRight(instrList.length-(methodEnds(i)-1)).foreach(elem => instrHashMap += (elem.num -> elem))
-      CFGs.append(new CFG(methodList(i), methodEnds(i), instrHashMap))
-    }
+    (0 to methodList.length - 1).foreach({ 
+      i => {
+        var instrHashMap = new HashMap[Int, SIR with Instr]
+        instrList.drop(methodList(i).start-1).dropRight(instrList.length-(methodEnds(i)-1)).foreach(elem => instrHashMap += (elem.num -> elem))
+        CFGs.append(new CFG(methodList(i), methodEnds(i), instrHashMap))
+      }
+    })
     CFGs.toList
   }
 }

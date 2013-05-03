@@ -27,13 +27,8 @@ object main {
     //made up of a list of basic blocks
     val CFGs = CFGFactory.makeAllCFGs(headers,instrs)
 
-    //time finding dominators
-    //start time
-    val start = System.nanoTime
+    //find dominators
     CFGs.foreach(cfg => dom.find_dominator(cfg))
-
-    //end time
-    val end = System.nanoTime
 
     //finalize cfg construction
     //moves CFGs from start,end representation to

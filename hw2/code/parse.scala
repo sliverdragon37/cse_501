@@ -39,8 +39,6 @@ object SIRParser extends StandardTokenParsers {
     op
   }}
 
-  def id:Parser[String] = rep(ident | "_") ^^ { case l => l.foldLeft("")(_+_) }
-
   def oparg:Parser[Operand] = reg | imm | loc | gp | fp | local
   def reg = "(" ~> numLit <~ ")" ^^ { case n => Register(n) }
   def imm = numLit ^^ { case n => Immediate(n) }

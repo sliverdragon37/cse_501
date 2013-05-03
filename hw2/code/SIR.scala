@@ -41,6 +41,7 @@ case class SSALocal(s:String,parent:Local) extends Operand { override def toStri
 case class Location(n:Int) extends Operand { override def toString = "[" + n + "]" }
 case object GlobalPointer extends Operand { override def toString = "GP" }
 case object FramePointer extends Operand { override def toString = "FP" }
+case class Dest(b:Block) extends Operand { override def toString = "[" + b.firstInstrLocation + "]" }
 
 sealed trait SIR {
 
@@ -91,6 +92,9 @@ case class GlobalDeclaration(v:(String,Int,IRType)) extends Declaration { overri
 //program and method entry
 case class Enter(a:Operand) extends Op with Instr with SSA { def repr = "enter " + a }
 case object Entrypc extends SIR with Instr with SSA { def repr = "entrypc" }
+
+//program exit
+case object Progend extends SIR with Instr with SSA { def repr = "progend" }
 
 //branch instructions
 case class Br(a:Operand) extends Op with Instr with SSA { def repr = "br " + a }
