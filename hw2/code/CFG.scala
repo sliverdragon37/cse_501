@@ -22,9 +22,96 @@ class Block(pStart:Int, pEnd:Int, pName:String, pBlocks:ListBuffer[Block]){
   var instrs:ListBuffer[SIR with Instr] = null
 
   //code represented like this once in SSA form
-  var instrsSSA:ListBuffer[SSA] = null
+  var instrsSSA:List[SSA] = null
 
-  def printSSA = {
+  //list of the variables that need phi nodes at the start of this
+  //block
+  var phi:List[Local] = List()
+
+  def rename:Unit = {
+
+    //TODO handle params differently
+    //if params never written to, ok to not process at all
+    //if params can be written to, then problems
+
+    def r(l:Local):SSA = Phi(l.genName)
+    instrsSSA = phi.map(r)
+
+    //all the locals in this block
+    //so we can pop their stacks later
+    var locals = new HashSet[Local]()
+
+    //turn all instrs into SSA versions
+    def use(o:Operand):Operand = {
+      o match {
+        case l:Local => l.getCurr
+        case _ => o
+      }
+    }
+    def define(o:Operand):Operand = {
+      o match {
+        case l:Local => {
+          locals += l
+          l.genName
+        }
+        case _ => o
+      }
+    }
+    def convert(instr:SIR with Instr):SSA = {
+      val ssa = instr match {
+        case Enter(a) => Enter(use(a))
+        case Entrypc => Entrypc
+        case Br(a) => Br(use(a))
+        case Blbc(a,b,c) => Blbc(use(a),use(b),c)
+        case Blbs(a,b,c) => Blbs(use(a),use(b),c)
+        case Call(a) => Call(use(a))
+        case Ret(a) => Ret(use(a))
+        case Nop() => Nop()
+        case Add(a,b,t) => Add(use(a),use(b),t)
+        case Sub(a,b,t) => Sub(use(a),use(b),t)
+        case Mul(a,b,t) => Mul(use(a),use(b),t)
+        case Div(a,b,t) => Div(use(a),use(b),t)
+        case Mod(a,b,t) => Mod(use(a),use(b),t)
+        case Neg(a,t) => Neg(use(a),t)
+        case Cmpeq(a,b,t) => Cmpeq(use(a),use(b),t)
+        case Cmple(a,b,t) => Cmple(use(a),use(b),t)
+        case Cmplt(a,b,t) => Cmplt(use(a),use(b),t)
+        case Isnull(a,t) => Isnull(use(a),t)
+        case Istype(a,b,t) => Istype(use(a),use(b),t)
+        case Load(a,t) => Load(use(a),t)
+        case Store(a,t) => Store(use(a),t)
+        case Move(a,b) => Move(use(a),define(b))
+        case New(a,t) => New(use(a),t)
+        case Newlist(a,t) => Newlist(use(a),t)
+        case Checknull(a,t) => Checknull(use(a),t)
+        case Checktype(a,b,t) => Checktype(use(a),use(b),t)
+        case Checkbounds(a,b) => Checkbounds(use(a),use(b))
+        case Lddynamic(a,b,t) => Lddynamic(use(a),use(b),t)
+        case Stdynamic(a,b) => Stdynamic(use(a),use(b))
+        case Write(a) => Write(use(a))
+        case Wrl() => Wrl()
+        case Param(a) => Param(use(a))
+      }
+      ssa.num = instr.num
+      ssa
+    }
+    instrsSSA = instrsSSA ++ instrs.map(convert)
+
+    //TODO vv do this vv
+    //somehow insert our version of variables into our successor's phi
+    //nodes here
+
+    succs.foreach(_.rename)
+
+    locals.foreach(_.pop)
+
+  }
+
+  def insertPhi(v:Local) {
+    phi::=v
+  }
+
+  def printSSA {
     println(name)
     instrsSSA.foreach(println)
     println()
@@ -47,32 +134,54 @@ class Block(pStart:Int, pEnd:Int, pName:String, pBlocks:ListBuffer[Block]){
     val newEnd = iMap(end) match {
       //is an explicit branch at the end of this block
       case Br(Location(n)) => Br(Dest(bMap(n)))
-      case Blbc(a,Location(n)) => Blbc(a,Dest(bMap(n)))
-      case Blbs(a,Location(n)) => Blbs(a,Dest(bMap(n)))
+      case Blbc(a,Location(n),_) => Blbc(a,Dest(bMap(n)),Some(Dest(bMap(end + 1))))
+      case Blbs(a,Location(n),_) => Blbs(a,Dest(bMap(n)),Some(Dest(bMap(end + 1))))
       case r:Ret => r
         //there is no explicit branch, just fall through
         //add an explicit branch to next block
       case x:SIR => {
         instrs.append(x)
-        Br(Dest(bMap(end + 1)))
+        val n = Br(Dest(bMap(end + 1)))
+        n.num = util.instr_count
+        util.instr_count += 1
+        n
       }
     }
-    newEnd.num = iMap(end).num
+    if (newEnd.num == -1) 
+      newEnd.num = iMap(end).num
     instrs.append(newEnd)
     
   }
 
   //convert a single basic block to SSA
+  //return the set of locals defined
+  def findDefs:Set[Local] = {
+    var definedVars = new HashSet[Local]()
+    def c(instr:SIR with Instr) = {
+      instr match {
+        case Move(a,b:Local) => {
+          definedVars += b
+        }
+        case _ =>
+      }
+    }
+    instrs.foreach(c)
+    definedVars
+  }
+
+  //DEPRECATED
+  /*
   def toSSA = {
     def use(o:Operand):Operand = {
       o match {
-        case l:Local => SSALocal(l.s + "$" + l.getCurrent,l)
+        case l:Local => SSALocal(l)
         case _ => o
       }
     }
     def define(o:Operand):Operand = {
       o match {
-        case l:Local => SSALocal(l.s + "$" + l.getNext,l)
+        case l:Local => SSALocal(l)
+        }
         case _ => o
       }
     }
@@ -82,8 +191,8 @@ class Block(pStart:Int, pEnd:Int, pName:String, pBlocks:ListBuffer[Block]){
         case Enter(a) => Enter(use(a))
         case Entrypc => Entrypc
         case Br(a) => Br(use(a))
-        case Blbc(a,b) => Blbc(use(a),use(b))
-        case Blbs(a,b) => Blbs(use(a),use(b))
+        case Blbc(a,b,c) => Blbc(use(a),use(b),c)
+        case Blbs(a,b,c) => Blbs(use(a),use(b),c)
         case Call(a) => Call(use(a))
         case Ret(a) => Ret(use(a))
         case Nop() => Nop()
@@ -118,7 +227,11 @@ class Block(pStart:Int, pEnd:Int, pName:String, pBlocks:ListBuffer[Block]){
 
     instrsSSA = instrs.map(convert)
 
+    definedVars
+
   }
+   */
+  //END DEPRECATED
 
   def handleBranch(instrLoc:Int, branchTo:Int, conditional:Boolean, upstreamBr:Boolean){
     // handle splitting this block
@@ -207,25 +320,27 @@ class CFG(header:MethodDeclaration, pEnd:Int, instrMap:HashMap[Int,SIR with Inst
   instrMap.values.foreach(instr => handleInstr(instr, instrMap))
   var list:ListBuffer[Block] = getTopoList
 
+  //mapping of local variables to all the blocks where they're defined
+  var symTable:Map[Local,HashSet[Block]] = null
+
   def printSSA = {
     list.foreach(_.printSSA)
   }
 
   def toSSA = {
-    //calculate the dominance frontiers
-    val frontier:HashMap[Block,HashSet[Block]] = new HashMap[Block,HashSet[Block]]()
-
     //loop through dominator tree in bottom up order
     val bottom_up = list.reverse
+
+    //calculate the dominance frontiers
+    val frontier = bottom_up.map({b => b -> new HashSet[Block]()}).toMap
 
     bottom_up.foreach({b => {
       if (b.idom != b) {
         b.idom.children.append(b)
       }
     }})
-
+    
     bottom_up.foreach({b => {
-      frontier.insert(b -> new HashSet[Block]())
       b.succs.foreach({s => {
         if (!(s.idom == b)) {
           frontier(b).add(s)
@@ -240,12 +355,41 @@ class CFG(header:MethodDeclaration, pEnd:Int, instrMap:HashMap[Int,SIR with Inst
       }})
     }})
 
+    //get info for where vars are defined
+    symTable = util.toMapSet(list.flatMap({b => {
+      val vars = b.findDefs
+      vars.map(v => v->b)}}).toList)
+
     //now dominance frontier is calculated
     //insert phi nodes
+    symTable.keys.foreach({v => {
+      var hasAlready = new HashSet[Block]()
+      var everOn = new HashSet[Block]()
+      var workList = new HashSet[Block]()
+      symTable(v).foreach({b => {
+        everOn += b
+        workList += b
+      }})
 
+      while (!workList.isEmpty) {
+        val x = workList.head
+        workList -= x
+        frontier(x).foreach({y => {
+          if (!hasAlready.contains(y)) {
+            y.insertPhi(v)
+            hasAlready += y
+            if (!everOn.contains(y)) {
+              everOn += y
+              workList += y
+            }
+          }
+        }})
+      }
+    }})
 
-    list.foreach(_.toSSA)
-
+    //now populate the phi nodes
+    root.rename
+    
   }
 
   def finishConstruction = {

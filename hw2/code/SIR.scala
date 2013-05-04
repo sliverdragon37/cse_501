@@ -1,9 +1,18 @@
+import scala.collection.mutable._
 
-sealed trait Operand {
-}
-
-sealed trait IRType {
-
+sealed trait Operand
+sealed trait IRType
+//common printing functionality vv
+sealed trait LocalRep {
+  val s:String
+  val n:Option[Int]
+  override def toString = {
+    val num = n match {
+      case Some(n) => n.toString
+      case None => "?"
+    }
+    s + "#" + num
+  }
 }
 
 sealed trait PrimitiveType extends IRType
@@ -22,31 +31,32 @@ case object BoolType extends PrimitiveType with BooleanT { override def toString
 
 case class Register(n:Int) extends Operand { override def toString = "(" + n + ")" }
 case class Immediate(n:Int) extends Operand { override def toString = n.toString }
-case class Local(s:String,n:Option[Int]) extends Operand { 
-  override def toString = {
-    val num = n match {
-      case Some(n) => n.toString
-      case None => "?"
-    }
-    s + "#" + num
-  }
+case class Base(s:String,n:Option[Int]) extends Operand with LocalRep
+case class Offset(s:String,n:Option[Int]) extends Operand with LocalRep
+case class TypeOper(s:String,n:Option[Int]) extends Operand with LocalRep
+case class Local(s:String,n:Option[Int]) extends Operand with LocalRep { 
   private var counter = 0
-  def getNext:Int = {
+  private val stack = new Stack[SSALocal]()
+  def genName:SSALocal = {
+    val l = SSALocal(this,counter)
+    stack.push(l)
     counter += 1
-    counter
+    l
   }
-  def getCurrent:Int = counter
+  def getCurr:SSALocal = {
+    stack.head
+  }
+  def pop:SSALocal = stack.pop
 }
-case class SSALocal(s:String,parent:Local) extends Operand { override def toString = s }
+case class SSALocal(parent:Local,n:Int) extends Operand { 
+  override def toString = parent.s + "$" + n
+}
 case class Location(n:Int) extends Operand { override def toString = "[" + n + "]" }
 case object GlobalPointer extends Operand { override def toString = "GP" }
 case object FramePointer extends Operand { override def toString = "FP" }
 case class Dest(b:Block) extends Operand { override def toString = "[" + b.firstInstrLocation + "]" }
 
-sealed trait SIR {
-
-}
-
+sealed trait SIR 
 sealed trait Instr {
   //instruction number
   var num:Int = -1
@@ -54,9 +64,7 @@ sealed trait Instr {
   override def toString = "    instr " + num.toString + ": " + repr
 }
 
-sealed trait SSA {
-
-}
+sealed trait SSA
 
 sealed trait Op extends SIR {
   val a:Operand
@@ -93,13 +101,10 @@ case class GlobalDeclaration(v:(String,Int,IRType)) extends Declaration { overri
 case class Enter(a:Operand) extends Op with Instr with SSA { def repr = "enter " + a }
 case object Entrypc extends SIR with Instr with SSA { def repr = "entrypc" }
 
-//program exit
-case object Progend extends SIR with Instr with SSA { def repr = "progend" }
-
 //branch instructions
 case class Br(a:Operand) extends Op with Instr with SSA { def repr = "br " + a }
-case class Blbc(a:Operand,b:Operand) extends Opop with Instr with SSA { def repr = "blbc " + a + " " + b }
-case class Blbs(a:Operand,b:Operand) extends Opop with Instr with SSA { def repr = "blbs " + a + " " + b }
+case class Blbc(a:Operand,b:Operand,default:Option[Operand]) extends Opop with Instr with SSA { def repr = "blbc " + a + " " + b }
+case class Blbs(a:Operand,b:Operand,default:Option[Operand]) extends Opop with Instr with SSA { def repr = "blbs " + a + " " + b }
 case class Call(a:Operand) extends Op with Instr with SSA { def repr = "call " + a }
 case class Ret(a:Operand) extends Op with Instr with SSA { def repr = "ret " + a }
 case class Nop() extends SIR with Instr with SSA { def repr = "nop" }
@@ -130,9 +135,16 @@ case class Wrl() extends SIR with Instr with SSA { def repr = "wrl" }
 case class Param(a:Operand) extends Op with Instr with SSA { def repr = "param " + a }
 
 
-//case class Other(s:List[String]) extends SIR with Instr { def repr = s.foldLeft("")((a,b) => a + b)}
+//phi functions
+case class Phi(a:SSALocal) extends SSA with Instr {
+  val args = new HashMap[Block,SSALocal]()
+  def add(b:Block,s:SSALocal) {
+    args += (b->s)
+  }
+  def repr = "phi " + a + " <- " + args
+}
 
-
+//an entire method definition
 case class Method(instrs:List[SIR with Instr],name:String,args:List[IRType],locals:List[IRType])
 
 

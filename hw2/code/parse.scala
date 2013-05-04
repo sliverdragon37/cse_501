@@ -1,4 +1,5 @@
 import scala.util.parsing.combinator.syntactical._
+import scala.collection.mutable._
 
 object SIRParser extends StandardTokenParsers {
 
@@ -6,6 +7,8 @@ object SIRParser extends StandardTokenParsers {
   val keywords = List("type","method","global","instr")
   val types = List("List","Integer","Boolean","dynamic","int","bool")
   val regs = List("GP","FP")
+
+  var symbolTable = new HashMap[String,Local]()
 
   lexical.reserved ++= instrs
   lexical.reserved ++= keywords
@@ -42,7 +45,28 @@ object SIRParser extends StandardTokenParsers {
   def oparg:Parser[Operand] = reg | imm | loc | gp | fp | local
   def reg = "(" ~> numLit <~ ")" ^^ { case n => Register(n) }
   def imm = numLit ^^ { case n => Immediate(n) }
-  def local = ident ~ "#" ~ (numLit ^^ {case n => Some(n)} | "?" ^^ {case _ => None}) ^^ { case s ~ _ ~ n => Local(s,n) }
+  def local = (
+    (ident ~ "#" ~ (numLit ^^ {case n => Some(n)} | "?" ^^ {case _ => None})) 
+      ^^ { case s ~ _ ~ n => {
+        if (s.endsWith("_base")) {
+          Base(s,n)
+        } else if (s.endsWith("_offset")) {
+          Offset(s,n)
+        } else if (s.endsWith("_type")) {
+          TypeOper(s,n)
+        } else {
+          symbolTable.get(s) match {
+            case Some(l) => l
+            case None => {
+              val l = Local(s,n)
+              symbolTable += (s->l)
+              l
+            }
+          }
+        }
+      }
+      }
+  )
   def loc = "[" ~> numLit <~ "]" ^^ { case n => Location(n) }
   def gp = "GP" ^^ { case _ => GlobalPointer }
   def fp = "FP" ^^ { case _ => FramePointer }
@@ -50,8 +74,8 @@ object SIRParser extends StandardTokenParsers {
   //Main parser for SIR ops
   def op:Parser[SIR with Instr] = (
     ("br" ~> loc ^^ {case l => Br(l)}) |
-      ("blbc" ~> oparg ~ loc ^^ {case o ~ l => Blbc(o,l)}) |
-      ("blbs" ~> oparg ~ loc ^^ {case o ~ l => Blbs(o,l)}) |
+      ("blbc" ~> oparg ~ loc ^^ {case o ~ l => Blbc(o,l,None)}) |
+      ("blbs" ~> oparg ~ loc ^^ {case o ~ l => Blbs(o,l,None)}) |
       ("call" ~> loc ^^ {case l => Call(l)}) |
       ("nop" ^^ {case _ => Nop()}) |
       ("add" ~> oparg ~ oparg ~ ":" ~ typ ^^ {case a1 ~ a2 ~ _ ~ t => Add(a1,a2,t) }) |

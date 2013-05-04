@@ -23,6 +23,9 @@ object main {
     //get just the instructions
     val instrs = util.toLeft(IR)
 
+    //store global instr count
+    util.instr_count = instrs.length
+
     //each CFG is a control flow graph for a method
     //made up of a list of basic blocks
     val CFGs = CFGFactory.makeAllCFGs(headers,instrs)
