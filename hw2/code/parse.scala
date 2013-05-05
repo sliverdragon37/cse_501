@@ -8,8 +8,6 @@ object SIRParser extends StandardTokenParsers {
   val types = List("List","Integer","Boolean","dynamic","int","bool")
   val regs = List("GP","FP")
 
-  var symbolTable = new HashMap[String,Local]()
-
   lexical.reserved ++= instrs
   lexical.reserved ++= keywords
   lexical.reserved ++= types
@@ -55,12 +53,14 @@ object SIRParser extends StandardTokenParsers {
         } else if (s.endsWith("_type")) {
           TypeOper(s,n)
         } else {
-          symbolTable.get(s) match {
-            case Some(l) => l
-            case None => {
-              val l = Local(s,n)
-              symbolTable += (s->l)
-              l
+          n match {
+            case None => throw new RuntimeException("Can't have mystery offset on where a local variable or parameter is")
+            case Some(n) => {
+              if (n > 0) {
+                ParamOper(s,Some(n))
+              } else {
+                Local(s,Some(n))
+              }
             }
           }
         }

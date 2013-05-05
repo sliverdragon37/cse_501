@@ -26,16 +26,37 @@ class Block(pStart:Int, pEnd:Int, pName:String, pBlocks:ListBuffer[Block]){
 
   //list of the variables that need phi nodes at the start of this
   //block
-  var phi:List[Local] = List()
+  var phi:List[Phi] = List()
+
+  private var renamed = false
+
+  def consolidateLocals(symTable:HashMap[String,Local]):Unit = {
+    def consolidate(o:Operand):Operand = {
+      o match {
+        case z:Local => {
+          symTable.get(z.s) match {
+            case Some(l) => l
+            case None => {
+              symTable += (z.s -> z)
+              z
+            }
+          }
+        }
+        case _ => o
+      }
+    }
+    instrs.map(_.opMap(consolidate))
+  }
 
   def rename:Unit = {
 
-    //TODO handle params differently
-    //if params never written to, ok to not process at all
-    //if params can be written to, then problems
+    if (renamed)
+      return
 
-    def r(l:Local):SSA = Phi(l.genName)
-    instrsSSA = phi.map(r)
+    renamed = true
+
+    //rename all of our phi functions
+    phi.foreach(_.gen)
 
     //all the locals in this block
     //so we can pop their stacks later
@@ -80,7 +101,9 @@ class Block(pStart:Int, pEnd:Int, pName:String, pBlocks:ListBuffer[Block]){
         case Istype(a,b,t) => Istype(use(a),use(b),t)
         case Load(a,t) => Load(use(a),t)
         case Store(a,t) => Store(use(a),t)
-        case Move(a,b) => Move(use(a),define(b))
+        case Move(a,b) => {
+          Move(use(a),define(b))
+        }
         case New(a,t) => New(use(a),t)
         case Newlist(a,t) => Newlist(use(a),t)
         case Checknull(a,t) => Checknull(use(a),t)
@@ -95,20 +118,25 @@ class Block(pStart:Int, pEnd:Int, pName:String, pBlocks:ListBuffer[Block]){
       ssa.num = instr.num
       ssa
     }
-    instrsSSA = instrsSSA ++ instrs.map(convert)
+    instrsSSA = phi ++ instrs.map(convert)
 
-    //TODO vv do this vv
-    //somehow insert our version of variables into our successor's phi
-    //nodes here
+    //insert phi args on our successors IN THE CFG
+    succs.foreach(_.insertPhiArgs(this))
 
-    succs.foreach(_.rename)
+    //recursively call rename on our successors IN THE DOMINATOR TREE
+    children.foreach(_.rename)
 
+    //pop the stacks
     locals.foreach(_.pop)
 
   }
 
+  def insertPhiArgs(b:Block) {
+    phi.foreach({p => p.add(b,p.a.getCurr)})
+  }
+
   def insertPhi(v:Local) {
-    phi::=v
+    phi ::= (Phi(v))
   }
 
   def printSSA {
@@ -168,70 +196,6 @@ class Block(pStart:Int, pEnd:Int, pName:String, pBlocks:ListBuffer[Block]){
     instrs.foreach(c)
     definedVars
   }
-
-  //DEPRECATED
-  /*
-  def toSSA = {
-    def use(o:Operand):Operand = {
-      o match {
-        case l:Local => SSALocal(l)
-        case _ => o
-      }
-    }
-    def define(o:Operand):Operand = {
-      o match {
-        case l:Local => SSALocal(l)
-        }
-        case _ => o
-      }
-    }
-    //turn all instrs into SSA versions
-    def convert(instr:SIR with Instr):SSA = {
-      val ssa = instr match {
-        case Enter(a) => Enter(use(a))
-        case Entrypc => Entrypc
-        case Br(a) => Br(use(a))
-        case Blbc(a,b,c) => Blbc(use(a),use(b),c)
-        case Blbs(a,b,c) => Blbs(use(a),use(b),c)
-        case Call(a) => Call(use(a))
-        case Ret(a) => Ret(use(a))
-        case Nop() => Nop()
-        case Add(a,b,t) => Add(use(a),use(b),t)
-        case Sub(a,b,t) => Sub(use(a),use(b),t)
-        case Mul(a,b,t) => Mul(use(a),use(b),t)
-        case Div(a,b,t) => Div(use(a),use(b),t)
-        case Mod(a,b,t) => Mod(use(a),use(b),t)
-        case Neg(a,t) => Neg(use(a),t)
-        case Cmpeq(a,b,t) => Cmpeq(use(a),use(b),t)
-        case Cmple(a,b,t) => Cmple(use(a),use(b),t)
-        case Cmplt(a,b,t) => Cmplt(use(a),use(b),t)
-        case Isnull(a,t) => Isnull(use(a),t)
-        case Istype(a,b,t) => Istype(use(a),use(b),t)
-        case Load(a,t) => Load(use(a),t)
-        case Store(a,t) => Store(use(a),t)
-        case Move(a,b) => Move(use(a),define(b))
-        case New(a,t) => New(use(a),t)
-        case Newlist(a,t) => Newlist(use(a),t)
-        case Checknull(a,t) => Checknull(use(a),t)
-        case Checktype(a,b,t) => Checktype(use(a),use(b),t)
-        case Checkbounds(a,b) => Checkbounds(use(a),use(b))
-        case Lddynamic(a,b,t) => Lddynamic(use(a),use(b),t)
-        case Stdynamic(a,b) => Stdynamic(use(a),use(b))
-        case Write(a) => Write(use(a))
-        case Wrl() => Wrl()
-        case Param(a) => Param(use(a))
-      }
-      ssa.num = instr.num
-      ssa
-    }
-
-    instrsSSA = instrs.map(convert)
-
-    definedVars
-
-  }
-   */
-  //END DEPRECATED
 
   def handleBranch(instrLoc:Int, branchTo:Int, conditional:Boolean, upstreamBr:Boolean){
     // handle splitting this block
@@ -355,6 +319,11 @@ class CFG(header:MethodDeclaration, pEnd:Int, instrMap:HashMap[Int,SIR with Inst
       }})
     }})
 
+    //go through and replace distinct local vars with single one
+    //would do in parser, but only want to do per method
+    var localTable = new HashMap[String,Local]()
+    list.foreach(_.consolidateLocals(localTable))
+
     //get info for where vars are defined
     symTable = util.toMapSet(list.flatMap({b => {
       val vars = b.findDefs
@@ -386,6 +355,8 @@ class CFG(header:MethodDeclaration, pEnd:Int, instrMap:HashMap[Int,SIR with Inst
         }})
       }
     }})
+
+    //list.foreach(_.instrs.foreach(println))
 
     //now populate the phi nodes
     root.rename
