@@ -30,6 +30,101 @@ class Block(pStart:Int, pEnd:Int, pName:String, pBlocks:ListBuffer[Block]){
 
   private var renamed = false
 
+  def allocate(i:Int) = {
+    def e(o:SIR with Instr):Boolean = {
+      o match {
+        case Enter(_) => true
+        case _ => false
+      }
+    }
+    val idx = instrs.indexWhere(e)
+    val old = instrs(idx)
+    instrs(idx) = Enter(Immediate(-1*i))
+    instrs(idx).num = old.num
+  }
+
+  def fixLocals(lc:immutable.Map[String,Local]) = {
+    def replace(o:Operand):Operand = {
+      o match {
+        case x:SSALocalVar => {
+          lc(x.toString)
+        }
+        case _ => o
+      }
+    }
+    instrs.foreach(_.opMap(replace))
+  }
+
+  def getLocals = {
+    def g(i:SIR with Instr):List[SSALocalVar] = {
+      def one(a:Operand) = {
+        a match {
+          case s:SSALocalVar => List(s)
+          case _ => List()
+        }
+      }
+      i match {
+        case x:Op => one(x.a)
+        case x:Opt => one(x.a)
+        case x:Opop => one(x.a) ++ one(x.b)
+        case x:Opopt => one(x.a) ++ one(x.b)
+        case x:Opopop => one(x.a) ++ one(x.b) //x.c is never a local
+        case _ => List()
+      }
+    }
+    instrs.flatMap(g)
+  }
+
+  def renumber(i:Int,m:HashMap[Int,Int]):Int = {
+    var x = i
+    for (instr <- instrs) {
+      println(instr.num + "->" + x)
+      m.put(instr.num,x)
+      instr.num = x
+      x += 1
+    }
+    x
+  }
+
+  def reRegister(m:HashMap[Int,Int]) = {
+    def r(o:Operand):Operand = {
+      o match {
+        case Register(n) => Register(m(n))
+        case Location(n) => Location(m(n))
+        case _ => o
+      }
+    }
+    instrs.foreach(_.opMap(r))
+  }
+
+  def fromSSA:List[(Block,SIR with Instr)] = {
+
+    //move instructions to insert
+    var toInsert:List[(Block,SIR with Instr)] = List()
+
+    def conv(instr:SSA):List[SIR with Instr] = {
+      instr match {
+        case p:Phi => {
+          p.args.foreach({ b => {
+            val block = b._1
+            val loc = b._2
+            //don't insert dead moves
+            if (b._2 != DEAD) {
+              toInsert ::= ((block,Move(b._2,p.ssa)))
+            }
+          }})
+          List()
+        }
+        case _ => List(instr.asInstanceOf[SIR with Instr])
+      }
+    }
+
+    instrs = new ListBuffer[SIR with Instr]
+    instrsSSA.flatMap(conv).foreach(instrs.append(_))
+
+    toInsert
+  }
+
   def consolidateLocals(symTable:HashMap[String,Local]):Unit = {
     def consolidate(o:Operand):Operand = {
       o match {
@@ -137,6 +232,10 @@ class Block(pStart:Int, pEnd:Int, pName:String, pBlocks:ListBuffer[Block]){
 
   def insertPhi(v:Local) {
     phi ::= (Phi(v))
+  }
+
+  def printInstrs {
+    instrs.foreach(println)
   }
 
   def printSSA {
@@ -287,6 +386,16 @@ class CFG(header:MethodDeclaration, pEnd:Int, instrMap:HashMap[Int,SIR with Inst
   //mapping of local variables to all the blocks where they're defined
   var symTable:Map[Local,HashSet[Block]] = null
 
+  var postSSAHeader:MethodDeclaration = null
+
+  def getHeader:MethodDeclaration = {
+    if (postSSAHeader == null) {
+      header
+    } else {
+      postSSAHeader
+    }
+  }
+
   def printSSA = {
     list.foreach(_.printSSA)
   }
@@ -356,11 +465,56 @@ class CFG(header:MethodDeclaration, pEnd:Int, instrMap:HashMap[Int,SIR with Inst
       }
     }})
 
-    //list.foreach(_.instrs.foreach(println))
-
     //now populate the phi nodes
     root.rename
     
+  }
+
+  //convert everything back to normal
+  def fromSSA = {
+    val toAdd = list.flatMap(_.fromSSA)
+    def add(x:(Block,SIR with Instr)):Unit = {
+      val b = x._1
+      val instr = x._2
+      //always add move instructions right before the last branch
+      b.instrs = b.instrs.dropRight(1) ++ List(instr) ++ List(b.instrs.last)
+    }
+    toAdd.foreach(add)
+    val locals = list.flatMap(_.getLocals)
+    var offsets:HashMap[String,Int] = new HashMap[String,Int]()
+    var curr = -4
+    for (l <- locals) {
+      if (!offsets.contains(l.toString)) {
+        offsets += (l.toString -> curr)
+        curr -= 4
+      }
+    }
+
+    def genParamsAndLocals(l:List[(String,Int,IRType)],lc:immutable.Map[String,Local]):List[(String,Int,IRType)] = {
+      val params = l.filter(_._2 > 0)
+      val origLocals = l.filter(_._2 < 0)
+      val origTypes = origLocals.map(x => x._1 -> x._3).toMap
+
+      def getOrig(s:String):String = s.takeWhile(_ != '$')
+
+      def makeLocal(s:String):(String,Int,IRType) = {
+        val n = lc(s).n match {
+          case Some(x) => x
+          case None => throw new RuntimeException("no dynamic offsets for local variables")
+        }
+        (s,n,origTypes(getOrig(s)))
+      }
+      val localsUnsorted = lc.keys.map(makeLocal).toList
+
+      val locals = localsUnsorted.sortWith({(x,y) => { x._2 < y._2}})
+
+      params ++ locals
+    }
+    val localCache = offsets.keys.map({k => {k -> Local(k,offsets.get(k))}}).toMap
+    postSSAHeader = MethodDeclaration(header.name,root.firstInstrLocation,genParamsAndLocals(header.paramsAndLocals,localCache))
+    list.foreach(_.fixLocals(localCache))
+    //make enter take the right amount of space
+    root.allocate(curr)
   }
 
   def finishConstruction = {
@@ -394,6 +548,15 @@ class CFG(header:MethodDeclaration, pEnd:Int, instrMap:HashMap[Int,SIR with Inst
 
   }
 
+  def renumber(i:Int,m:HashMap[Int,Int]):Int = {
+    var x = i
+    for (b <- list) {
+      x = b.renumber(x,m)
+    }
+    list.foreach(_.reRegister(m))
+    x
+  }
+
   def getTopoList() = {
     var workList:Queue[Block] = new Queue[Block]()
     var finalList:ListBuffer[Block] = new ListBuffer[Block]()
@@ -408,6 +571,10 @@ class CFG(header:MethodDeclaration, pEnd:Int, instrMap:HashMap[Int,SIR with Inst
     }
 
     finalList
+  }
+
+  def printInstrs = {
+    list.foreach(_.printInstrs)
   }
 
   override def toString:String = {

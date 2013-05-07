@@ -1,13 +1,13 @@
 import scala.collection.mutable._
 
-trait Operand {
+sealed trait Operand {
 
 }
-trait IRType {
+sealed trait IRType {
 
 }
 
-trait LocalRep {
+sealed trait LocalRep {
   val s:String
   val n:Option[Int]
   override def toString = {
@@ -19,65 +19,65 @@ trait LocalRep {
   }
 }
 
-trait PrimitiveType extends IRType {
+sealed trait PrimitiveType extends IRType {
 }
-trait BoxedType extends IRType {
+sealed trait BoxedType extends IRType {
 }
-trait NumberT {
+sealed trait NumberT {
 }
-trait BooleanT {
+sealed trait BooleanT {
 }
 
-trait SIR {
+sealed trait SIR {
   def opMap(f:(Operand => Operand)):Unit = {
   }
 }
-trait Instr {
+sealed trait Instr {
   //instruction number
   var num:Int = -1
   def repr:String
   override def toString = "    instr " + num.toString + ": " + repr
 }
 
-trait SSA {
+sealed trait SSA {
 
 }
 
-trait Op extends SIR {
+sealed trait Op extends SIR {
   var a:Operand
-  def unapply(x:Operand):Option[Operand] = Some(a)
+  //def unapply(x:Operand):Option[Operand] = Some(a)
   override def opMap(f:(Operand => Operand)):Unit = a = f(a)
 }
-trait Opop extends SIR {
+sealed trait Opop extends SIR {
   var a:Operand
   var b:Operand
-  def unapply(x:Operand,y:Operand):Option[(Operand,Operand)] = Some(a,b)
+  //def unapply(x:Operand,y:Operand):Option[(Operand,Operand)]
   override def opMap(f:(Operand => Operand)):Unit = {
     a = f(a)
     b = f(b)
   }
 }
-trait Opt extends SIR {
+sealed trait Opt extends SIR {
   var a:Operand
   val t:IRType
-  def unapply(x:Operand,z:IRType):Option[(Operand,IRType)] = Some(a,t)
+  //def unapply(x:Operand,z:IRType):Option[(Operand,IRType)] = Some(a,t)
   override def opMap(f:(Operand => Operand)):Unit = a = f(a)
 }
-trait Opopt extends SIR {
+sealed trait Opopt extends SIR {
   var a:Operand
   var b:Operand
   val t:IRType
-  def unapply(x:Operand,y:Operand,z:IRType):Option[(Operand,Operand,IRType)] = Some(a,b,t)
+  //def unapply(x:Operand,y:Operand,z:IRType):Option[(Operand,Operand,IRType)] = Some(a,b,t)
   override def opMap(f:(Operand => Operand)):Unit = {
     a = f(a)
     b = f(b)
   }
 }
-trait Opopop extends SIR {
+sealed trait Opopop extends SIR {
   var a:Operand
   var b:Operand
   var c:Option[Operand]
-  def unapply(x:Operand,y:Operand,z:Option[Operand]):Option[(Operand,Operand,Option[Operand])] = Some(a,b,c)
+  //def unapply(x:Operand,y:Operand,z:Option[Operand]):Option[(Operand,Operand,Option[Operand])] = Some(a,b,c)
   override def opMap(f:(Operand => Operand)):Unit = {
     a = f(a)
     b = f(b)
@@ -88,7 +88,7 @@ trait Opopop extends SIR {
   }
 }
 
-trait Declaration {
+sealed trait Declaration {
   def argToS(v:(String,Int,IRType)):String = v._1 + "#" + v._2 + ":" + v._3 
   def argsToS(lv:List[(String,Int,IRType)]):String = lv.map(argToS(_) + " ").foldLeft("")(_+_)
 }
@@ -131,7 +131,7 @@ case class Local(s:String,n:Option[Int]) extends Operand with LocalRep {
   }
 }
 
-trait SSALocal extends Operand
+sealed trait SSALocal extends Operand
 case object DEAD extends SSALocal
 case class SSALocalVar(parent:Local,n:Int) extends SSALocal { 
   override def toString = parent.s + "$" + n
@@ -195,7 +195,7 @@ case class Phi(a:Local) extends SSA with Instr {
     val s = if (ssa != null) { ssa } else { a }
     "phi " + s + " <- " + args
   }
-  private var ssa:SSALocal = null
+  var ssa:SSALocal = null
   def gen = ssa = a.genName
 }
 

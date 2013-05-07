@@ -1,6 +1,7 @@
 import scala.io.Source
 import java.io.FileOutputStream
 import java.io.PrintStream
+import scala.collection.mutable._
 
 object main {
 
@@ -48,10 +49,32 @@ object main {
     //CFGs.foreach(System.err.println(_.getStats))
     //System.err.println("Finding dominators took " + (end-start) + " nanoseconds")
 
+    //convert back out of SSA
+    CFGs.foreach(_.fromSSA)
+
+    //print out final code
+    CFGs.foreach(_.printInstrs)
+
+    //renumber instructions
+    var i = 1
+    var m:HashMap[Int,Int] = new HashMap[Int,Int]()
+    for (c <- CFGs) {
+      i = c.renumber(i,m)
+    }
+
+    val tHeaders = headers collect { case t:TypeDeclaration => t }
+    val gHeaders = headers collect { case g:GlobalDeclaration => g }
+    val mHeaders = CFGs.map(_.getHeader)
+    val allHeaders = tHeaders ++ mHeaders ++ gHeaders
+
     //write the optimized code back out to file
     val out_file = new java.io.FileOutputStream(outfname)
     val out_stream = new java.io.PrintStream(out_file)
-    (headers ++ instrs).map(_.toString).map(_+"\n").foreach(out_stream.print(_))
+    val instrsOpt = (allHeaders.map(_.toString).map(_ + "\n")) ++ (CFGs.flatMap(_.list.flatMap(_.instrs)).map(_.toString).map(_+"\n"))
+    instrsOpt.foreach(out_stream.print(_))
+    println("optimized code:")
+    println("")
+    instrsOpt.foreach(print)
     out_stream.close
   }
 }
