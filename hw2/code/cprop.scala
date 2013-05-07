@@ -19,25 +19,37 @@ class Expr (var latVal:LatticeValue, var sourceVal:Int, var instr:Instr){
 
 object cprop {
 
-  def runCprop(cfg:CFG): List[Expr] = {
+  def runCprop(cfg:CFG): List[Instr] = {
     var exprMap:HashMap[Int, Expr] = new HashMap[Int, Expr]()
     var ssaEdges:HashMap[Expr, Set[Expr]] = new HashMap[Expr, Set[Expr]]()
     var workList:Queue[(Expr,Expr)] = new Queue[(Expr, Expr)]()
     var instrList:ListBuffer[SSA] = new ListBuffer[SSA]()
     var exprList:ListBuffer[Expr] = new ListBuffer[Expr]()
-    cfg.list.foreach(c => {c.instrsSSA.foreach(ins => instrList += ins)})
+    cfg.list.foreach(c => {
+      //println(c.instrsSSA.size);
+      //      c.instrsSSA.foreach(i => println(i));
+      c.instrsSSA.foreach(ins => instrList += ins)})
 
     exprList = instrList.map(i => ssaToExpr(i))
-    //println(exprList.size)
+//println("EXPLIST")
+//    exprList.foreach(e => println(e))
+//    println(exprList.size)
     exprList.foreach(e => exprMap.put(e.sourceVal, e))
-    //println(exprMap.size)
-    //println("+++ EXPRESSION MAP +++")
-    //exprMap.foreach(e => println(e))
-    //println("+++\t\t+++")
+
+//println("EXPMAP1")
+//    exprMap.foreach(e => println(e._2))
+
+//    println(exprMap.size)
+//    println("+++ EXPRESSION MAP +++")
+//    exprMap.foreach(e => println(e))
+//    println("+++\t\t+++")
     ssaEdges = constructSsaEdges(exprMap)
-    //println("*** SSA EDGES ***")
-    //ssaEdges.foreach(s => println("" + s._1 + " : " + s._2))
-    //println("***\t\t***")
+//println("EXPMAP2")
+//    exprMap.foreach(e => println(e._2))
+
+//    println("*** SSA EDGES ***")
+//    ssaEdges.foreach(s => println("" + s._1 + " : " + s._2))
+//    println("***\t\t***")
     workList = constructWorkList(ssaEdges)
 
 
@@ -45,26 +57,183 @@ object cprop {
     while (!workList.isEmpty){
       var work = workList.dequeue()
 
-      if (work._2.latVal != Bottom){
+      if (work._2.latVal != Bottom && (work._2.instr match{
+        case phi:Phi => wellDefinedPhi(phi, exprMap)
+        case _ => true
+      })){
         // Just need to look at source and target of this edge
-        var temp = eval(work._1, work._2)
+        var temp = eval(work._1, work._2, exprMap)
         if (temp != work._2.latVal){
           work._2.latVal = temp
           if (work._2.latVal == Const){
-//            println("UPDATING: " + work._2)
             work._2.constVal = updateConstVal(work._2, exprMap)
-//            println("UPDATED: " + work._2)
           }
           // add children to worklist
           workList = addToWorkList(work._2, ssaEdges, workList)
         }
       }
+      // Not all the Phi's args were defined, requeue
+      else if (work._2.instr == Phi){
+        workList.enqueue(work)
+      }
     }
 
+    // at this point every expression should be either Bottom or Const
+    // Now iterate through all expressions, any (except Phi!) with
+    //const operands we can replace with an immediate value
+    val exitList = exprMap.filter(e => !deadExpr(e._2, ssaEdges)).map(e =>
+    {replaceConstOperands(e._2, exprMap)}).toList.sortBy(i => i.num)
 
-    exprList.toList
+
+    // After having replace all constant reference values with
+    //immmediates, we can now remove all expressions marked as Const
+    //EXCEPT Move expressions leading to a non-Const Phi node
+
+//    println("EXPR MAP: ")
+//      exprList.sortBy(e => e.instr.num).foreach(e => println(e))
+//    println("___")
+//    exitList.foreach(e => println(e))
+    exitList
+    }
+
+  // Checks that all arguments of a phi node are non-Top
+  def wellDefinedPhi(phi:Phi, exprMap:Map[Int, Expr]):Boolean = {
+    phi.args.forall (arg => arg._2 == DEAD || exprMap(arg._2.hashCode()).latVal != Top)
   }
 
+  def getOpVal(op:Operand, exprMap:Map[Int, Expr]): Int ={
+    val result = op match{
+      case i:Immediate => i.n
+      case r:Register => exprMap(r.n).constVal
+      case s:SSALocalVar => exprMap(s.hashCode()).constVal
+      case _ => 0
+    }
+    result
+  }
+
+  def getOpTypeAndVal(op:Operand, exprMap:Map[Int, Expr]): (LatticeValue, Int) = {
+    val result = op match{
+      case i:Immediate => (Const, i.n)
+      case r:Register => (exprMap(r.n).latVal, exprMap(r.n).constVal)
+      case s:SSALocalVar => (exprMap(s.hashCode()).latVal, exprMap(s.hashCode()).constVal)
+      case _ => (Bottom, 0)
+    }
+    result
+  }
+
+  // Returns true if the expr is constant and either has no
+  //expressions using it or none of them are phi nodes
+  def deadExpr(expr:Expr, ssaEdges:Map[Expr, Set[Expr]]): Boolean = {
+    (expr.latVal == Const) && (!ssaEdges.contains(expr) || (ssaEdges(expr).forall(e => e.instr != Phi)))
+  }
+
+  // Check the operand(s) of expr; if any of them are constant,
+  //replace them in this expr with immediates based on their constVal
+  //field, UNLESS this expr is a Phi node
+  def replaceConstOperands(expr:Expr, exprMap:Map[Int, Expr]): Instr =
+  {
+    val result = expr.instr match{
+      case phi:Phi => phi// do nothing
+      case nop:Nop => nop
+      case move:Move => {
+        val op = getOpTypeAndVal(move.a, exprMap)
+        if (op._1 == Const && move.a != Immediate){
+          move.a = new Immediate(op._2)
+        }
+        move
+      }
+      case branch:Blbs => {
+        val op = getOpTypeAndVal(branch.a, exprMap)
+        if (op._1 == Const && branch.a != Immediate){
+          // Condition is always false so make this a NOP
+          if (op._2 == 0){
+            var temp = new Nop()
+            temp.num = branch.num
+            temp
+          }
+          // Condition is always true, so make this an unconditional
+          //branch
+          else{
+            branch.b match{
+              case d:Dest => {
+                var temp = new Br(d)
+                temp.num = branch.num
+                temp
+              }
+              case _ => branch
+            }
+          }
+        }else{
+          branch
+        }
+      }
+      case branch:Blbc =>{
+        val op = getOpTypeAndVal(branch.a, exprMap)
+        if (op._1 == Const && branch.a != Immediate){
+          // Condition is always false so make this a NOP
+          if (op._2 != 0){
+            var temp = new Nop()
+            temp.num = branch.num
+            temp
+          }
+          // Condition is always true, so make this an unconditional
+          //branch
+          else{
+            branch.b match{
+              case d:Dest => {
+                var temp = new Br(d)
+                temp.num = branch.num
+                temp
+              }
+              case _ => branch
+            }
+          }
+        }else{
+          branch
+        }
+      }
+    case singleOp:Op => {
+        val op = getOpTypeAndVal(singleOp.a, exprMap)
+        if (op._1 == Const && singleOp.a != Immediate){
+          singleOp.a = new Immediate(op._2)
+        }
+        singleOp
+      }
+      case singleOp:Opt => {
+        val op = getOpTypeAndVal(singleOp.a, exprMap)
+        if (op._1 == Const && singleOp.a != Immediate){
+          singleOp.a = new Immediate(op._2)
+        }
+        singleOp
+      }
+      case doubleOp:Opop => {
+        val op1 = getOpTypeAndVal(doubleOp.a, exprMap)
+        if (op1._1 == Const && doubleOp.a != Immediate){
+          doubleOp.a = new Immediate(op1._2)
+        }
+
+        val op2 = getOpTypeAndVal(doubleOp.b, exprMap)
+        if (op2._1 == Const && doubleOp.b != Immediate){
+          doubleOp.b = new Immediate(op2._2)
+        }
+          doubleOp
+      }
+      case doubleOp:Opopt => {
+        val op1 = getOpTypeAndVal(doubleOp.a, exprMap)
+        if (op1._1 == Const && doubleOp.a != Immediate){
+          doubleOp.a = new Immediate(op1._2)
+        }
+
+        val op2 = getOpTypeAndVal(doubleOp.b, exprMap)
+        if (op2._1 == Const && doubleOp.b != Immediate){
+          doubleOp.b = new Immediate(op2._2)
+        }
+          doubleOp
+      }
+      case instr:Instr => instr // do nothing
+    }
+    result
+  }
 
   // Add the pairs of (expr, expr2) for each expr2 in the set of
   //ssaEdges corresponding to expr
@@ -84,59 +253,29 @@ object cprop {
   def updateConstVal(expr:Expr, exprMap:Map[Int, Expr]): Int = {
     val result:Int = expr.instr match{
       case singleOp:Op => {
-        val sourceVal = singleOp.a match{
-          case i:Immediate => i.n
-          case r:Register => exprMap(r.n).constVal
-          case s:SSALocalVar => exprMap(s.hashCode()).constVal
-          case _ => 0
-        }
+        val sourceVal = getOpVal(singleOp.a, exprMap)
         expr.instr match{
           case _ => 0
         }
       }
       case singleOpt:Opt => {
-        val sourceVal = singleOpt.a match{
-          case i:Immediate => i.n
-          case r:Register => exprMap(r.n).constVal
-          case s:SSALocalVar => exprMap(s.hashCode()).constVal
-          case _ => 0
-        }
+        val sourceVal = getOpVal(singleOpt.a, exprMap)
         expr.instr match{
           case _:Neg => -sourceVal
           case _ => 0
         }
       }
       case doubleOp:Opop => {
-        val op1Val = doubleOp.a match{
-          case i:Immediate => i.n
-          case r:Register => exprMap(r.n).constVal
-          case s:SSALocalVar => exprMap(s.hashCode()).constVal
-          case _ => 0
-        }
-        val op2Val = doubleOp.b match{
-          case i:Immediate => i.n
-          case r:Register => exprMap(r.n).constVal
-          case s:SSALocalVar => exprMap(s.hashCode()).constVal
-          case _ => 0
-        }
-        expr.instr match{
+        val op1Val = getOpVal(doubleOp.a, exprMap)
+        val op2Val = getOpVal(doubleOp.b, exprMap)
+          expr.instr match{
           case _:Move => op1Val
           case _ => 0
         }
       }
       case doubleOpt:Opopt => {
-        val op1Val = doubleOpt.a match{
-          case i:Immediate => i.n
-          case r:Register => exprMap(r.n).constVal
-          case s:SSALocalVar => exprMap(s.hashCode()).constVal
-          case _ => 0
-        }
-        val op2Val = doubleOpt.b match{
-          case i:Immediate => i.n
-          case r:Register => exprMap(r.n).constVal
-          case s:SSALocalVar => exprMap(s.hashCode()).constVal
-          case _ => 0
-        }
+        val op1Val = getOpVal(doubleOpt.a, exprMap)
+        val op2Val = getOpVal(doubleOpt.b, exprMap)
         expr.instr match{
           case _:Add => op1Val + op2Val
           case _:Sub => op1Val - op2Val
@@ -149,20 +288,44 @@ object cprop {
           case _ => 0
         }
       }
-      case phi:Phi => expr.constVal
-
+      case phi:Phi => {
+        val a = phi.args.values find(v => exprMap.get(v.hashCode()) match {
+          case Some(_) => true
+          case None => false
+        })
+        exprMap(a.get.hashCode()).constVal
+      }
+      case _ => 0
     }
     result
   }
 
-  def eval(source:Expr, target:Expr): LatticeValue = {
+
+  def eval(source:Expr, target:Expr, exprMap:Map[Int, Expr]): LatticeValue = {
     val result = source.latVal match{
       case Bottom => Bottom
       case Const => {
         target.instr match{
-          case _:Phi => {
-            if (source.constVal == target.constVal) Const 
-            else Bottom
+          case phi:Phi => {
+            // all args to this phi should be Const or Bottom by now
+            if (phi.args.forall{arg => arg._2 == DEAD || (
+    exprMap(arg._2.hashCode()).latVal == Const)}){
+              val a = phi.args.values find(v => exprMap.get(v.hashCode()) match {
+                case Some(_) => true
+                case None => false
+              })
+              val aConst = exprMap(a.get.hashCode()).constVal
+//              phi.args.foreach(arg => println(exprMap(arg._2.hashCode())))
+              if (phi.args.forall{arg => exprMap(arg._2.hashCode()).constVal == aConst}){
+                Const
+              }
+              else{
+                Bottom
+              }
+            }
+            else{
+              Bottom
+            }
           }
           case _ => Const
         }
@@ -214,7 +377,7 @@ object cprop {
   {
     var result:HashMap[Expr,Set[Expr]] = new HashMap[Expr,Set[Expr]]()
     exprMap.foreach(e => {
-      if (e._2.latVal != Bottom){
+      if (e._2.latVal != Bottom || true){
         e._2.instr match {
           case move:Move => 
             move.a match{
@@ -251,7 +414,6 @@ object cprop {
               case _ => e._2.latVal = Bottom
             }
           case doubleOp:Opop => {
-            //println("DOU: " + doubleOp)
             doubleOp.a match{
               case i:Immediate => // do nothing
               case r:Register => addToMappedSet(result, exprMap(r.n), e._2)
@@ -288,7 +450,7 @@ object cprop {
               case i:Immediate => // do nothing
               case r:Register => addToMappedSet(result, exprMap(r.n), e._2)
               case s:SSALocalVar => addToMappedSet(result,
-  exprMap(s.hashCode()), e._2)
+                exprMap(s.hashCode()), e._2)
               // Nothing besides a register or an SSALocalVar could
               //wind up being a constant, so set this expression to
               //bottom premptively if it has any other operand
@@ -300,9 +462,10 @@ object cprop {
                 case DEAD =>
                 case _ => addToMappedSet(result,
                   exprMap(arg._2.hashCode()), e._2)
-              }
+            }
             })
           }
+          case _ => // do nothing
         }
       }
     })
@@ -348,6 +511,7 @@ object cprop {
       if (expr.latVal == Const){
         expr.constVal = getConstVal(instr)
       }
+//      println(expr + " : " + instr)
       expr
     }
 
