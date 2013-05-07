@@ -25,20 +25,19 @@ object cprop {
     var workList:Queue[(Expr,Expr)] = new Queue[(Expr, Expr)]()
     var instrList:ListBuffer[SSA] = new ListBuffer[SSA]()
     var exprList:ListBuffer[Expr] = new ListBuffer[Expr]()
-    cfg.list.foreach(c => {println(c.instrsSSA.size); c.instrsSSA.foreach(ins => instrList +=
-    ins)})
+    cfg.list.foreach(c => {c.instrsSSA.foreach(ins => instrList += ins)})
 
     exprList = instrList.map(i => ssaToExpr(i))
-    println(exprList.size)
+    //println(exprList.size)
     exprList.foreach(e => exprMap.put(e.sourceVal, e))
-    println(exprMap.size)
-    println("+++ EXPRESSION MAP +++")
-    exprMap.foreach(e => println(e))
-    println("+++\t\t+++")
+    //println(exprMap.size)
+    //println("+++ EXPRESSION MAP +++")
+    //exprMap.foreach(e => println(e))
+    //println("+++\t\t+++")
     ssaEdges = constructSsaEdges(exprMap)
-    println("*** SSA EDGES ***")
-    ssaEdges.foreach(s => println("" + s._1 + " : " + s._2))
-    println("***\t\t***")
+    //println("*** SSA EDGES ***")
+    //ssaEdges.foreach(s => println("" + s._1 + " : " + s._2))
+    //println("***\t\t***")
     workList = constructWorkList(ssaEdges)
 
 
@@ -252,7 +251,7 @@ object cprop {
               case _ => e._2.latVal = Bottom
             }
           case doubleOp:Opop => {
-            println("DOU: " + doubleOp)
+            //println("DOU: " + doubleOp)
             doubleOp.a match{
               case i:Immediate => // do nothing
               case r:Register => addToMappedSet(result, exprMap(r.n), e._2)

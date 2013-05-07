@@ -42,18 +42,11 @@ object main {
     //convert each CFG to SSA
     CFGs.foreach(_.toSSA)
 
-    //print out the SSA representation
-    CFGs.foreach(_.printSSA)
-
-    //print the stats about CFGs
-    //CFGs.foreach(System.err.println(_.getStats))
-    //System.err.println("Finding dominators took " + (end-start) + " nanoseconds")
+    //Run all optimizations that require SSA
+    CFGs.foreach(cprop.runCprop(_))
 
     //convert back out of SSA
     CFGs.foreach(_.fromSSA)
-
-    //print out final code
-    CFGs.foreach(_.printInstrs)
 
     //renumber instructions
     var i = 1
@@ -72,9 +65,6 @@ object main {
     val out_stream = new java.io.PrintStream(out_file)
     val instrsOpt = (allHeaders.map(_.toString).map(_ + "\n")) ++ (CFGs.flatMap(_.list.flatMap(_.instrs)).map(_.toString).map(_+"\n"))
     instrsOpt.foreach(out_stream.print(_))
-    println("optimized code:")
-    println("")
-    instrsOpt.foreach(print)
     out_stream.close
   }
 }

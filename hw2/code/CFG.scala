@@ -78,7 +78,6 @@ class Block(pStart:Int, pEnd:Int, pName:String, pBlocks:ListBuffer[Block]){
   def renumber(i:Int,m:HashMap[Int,Int]):Int = {
     var x = i
     for (instr <- instrs) {
-      println(instr.num + "->" + x)
       m.put(instr.num,x)
       instr.num = x
       x += 1
