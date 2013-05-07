@@ -21,21 +21,28 @@ object cprop {
 
   def runCprop(cfg:CFG): List[Expr] = {
     var exprMap:HashMap[Int, Expr] = new HashMap[Int, Expr]()
-    var ssaEdges:HashMap[Expr, Expr] = new HashMap[Expr, Expr]()
+    var ssaEdges:HashMap[Expr, Set[Expr]] = new HashMap[Expr, Set[Expr]]()
     var workList:Queue[(Expr,Expr)] = new Queue[(Expr, Expr)]()
     var instrList:ListBuffer[SSA] = new ListBuffer[SSA]()
-    var exprList:ListBuffer[Expr] = null
-    cfg.list.foreach(c => c.instrsSSA.foreach(ins => instrList += ins))
-      exprList = instrList.map(i => ssaToExpr(i))
+    var exprList:ListBuffer[Expr] = new ListBuffer[Expr]()
+    cfg.list.foreach(c => {println(c.instrsSSA.size); c.instrsSSA.foreach(ins => instrList +=
+    ins)})
+
+    exprList = instrList.map(i => ssaToExpr(i))
+    println(exprList.size)
     exprList.foreach(e => exprMap.put(e.sourceVal, e))
-
+    println(exprMap.size)
+    println("+++ EXPRESSION MAP +++")
+    exprMap.foreach(e => println(e))
+    println("+++\t\t+++")
     ssaEdges = constructSsaEdges(exprMap)
+    println("*** SSA EDGES ***")
     ssaEdges.foreach(s => println("" + s._1 + " : " + s._2))
-
+    println("***\t\t***")
     workList = constructWorkList(ssaEdges)
 
 
-
+    // propagate
     while (!workList.isEmpty){
       var work = workList.dequeue()
 
@@ -45,14 +52,32 @@ object cprop {
         if (temp != work._2.latVal){
           work._2.latVal = temp
           if (work._2.latVal == Const){
+//            println("UPDATING: " + work._2)
             work._2.constVal = updateConstVal(work._2, exprMap)
+//            println("UPDATED: " + work._2)
           }
           // add children to worklist
+          workList = addToWorkList(work._2, ssaEdges, workList)
         }
       }
     }
 
+
     exprList.toList
+  }
+
+
+  // Add the pairs of (expr, expr2) for each expr2 in the set of
+  //ssaEdges corresponding to expr
+  // ssaEdges is mapping an expr to all the expr's that use it as an
+  //operand, so we will find all such expr's and add those pairs to
+  //the worklist
+  def addToWorkList(expr:Expr, ssaEdges:Map[Expr, Set[Expr]], workList:Queue[(Expr,Expr)]): Queue[(Expr, Expr)] = {
+    var result:Queue[(Expr, Expr)] = workList
+    if (ssaEdges.contains(expr)){
+      ssaEdges(expr).foreach(e => result.enqueue((expr, e)))
+    }
+    result
   }
 
   // Calculate the new constant value based on the instruction types
@@ -60,23 +85,55 @@ object cprop {
   def updateConstVal(expr:Expr, exprMap:Map[Int, Expr]): Int = {
     val result:Int = expr.instr match{
       case singleOp:Op => {
-       val sourceVal = singleOp.a match{
-         case r:Register => exprMap(r.n).constVal
-         case s:SSALocalVar => exprMap(s.hashCode()).constVal
-         case _ => 0
+        val sourceVal = singleOp.a match{
+          case i:Immediate => i.n
+          case r:Register => exprMap(r.n).constVal
+          case s:SSALocalVar => exprMap(s.hashCode()).constVal
+          case _ => 0
         }
         expr.instr match{
-           case _:Neg => -sourceVal
-           case _ => 0
-         }
+          case _ => 0
+        }
+      }
+      case singleOpt:Opt => {
+        val sourceVal = singleOpt.a match{
+          case i:Immediate => i.n
+          case r:Register => exprMap(r.n).constVal
+          case s:SSALocalVar => exprMap(s.hashCode()).constVal
+          case _ => 0
+        }
+        expr.instr match{
+          case _:Neg => -sourceVal
+          case _ => 0
+        }
       }
       case doubleOp:Opop => {
         val op1Val = doubleOp.a match{
+          case i:Immediate => i.n
           case r:Register => exprMap(r.n).constVal
           case s:SSALocalVar => exprMap(s.hashCode()).constVal
           case _ => 0
         }
         val op2Val = doubleOp.b match{
+          case i:Immediate => i.n
+          case r:Register => exprMap(r.n).constVal
+          case s:SSALocalVar => exprMap(s.hashCode()).constVal
+          case _ => 0
+        }
+        expr.instr match{
+          case _:Move => op1Val
+          case _ => 0
+        }
+      }
+      case doubleOpt:Opopt => {
+        val op1Val = doubleOpt.a match{
+          case i:Immediate => i.n
+          case r:Register => exprMap(r.n).constVal
+          case s:SSALocalVar => exprMap(s.hashCode()).constVal
+          case _ => 0
+        }
+        val op2Val = doubleOpt.b match{
+          case i:Immediate => i.n
           case r:Register => exprMap(r.n).constVal
           case s:SSALocalVar => exprMap(s.hashCode()).constVal
           case _ => 0
@@ -87,13 +144,14 @@ object cprop {
           case _:Mul => op1Val * op2Val
           case _:Div => op1Val / op2Val
           case _:Mod => op1Val % op2Val
-          case _:Move => op1Val
           case _:Cmpeq => if (op1Val == op2Val) 1 else 0
           case _:Cmple => if (op1Val <= op2Val) 1 else 0
           case _:Cmplt => if (op1Val < op2Val) 1 else 0
           case _ => 0
         }
       }
+      case phi:Phi => expr.constVal
+
     }
     result
   }
@@ -118,33 +176,53 @@ object cprop {
 
 
   // Adds all edges whose source (1) expression is not of type Top
-  def constructWorkList(edges:Map[Expr, Expr]): Queue[(Expr,Expr)] = {
+  def constructWorkList(edges:HashMap[Expr, Set[Expr]]): Queue[(Expr,Expr)] = {
     var workList:Queue[(Expr, Expr)] = new Queue[(Expr, Expr)]()
 
-    edges.foreach(e => if (e._1.latVal != (Top)) workList.enqueue(e))
+    edges.foreach(s => 
+      if (s._1.latVal != (Top)) {
+        s._2.foreach(e => workList.enqueue((s._1, e)))
+      })
 
     workList
   }
 
-  // Construct the edges as a mapping of [ExprA, ExprB] such that A is
+  // Takes a hashmap, a key, and a value, and inserts the value into
+  //the set paired with the key, creating a new set for the key if necessary
+  def addToMappedSet[A,B](hm:HashMap[A, Set[B]], key:A, value:B):HashMap[A, Set[B]]
+  = {
+    var result:HashMap[A, Set[B]] = hm
+      hm.get(key) match{
+      case Some(_) => result(key).add(value)
+      case None =>{
+        var s = new HashSet[B]()
+        s.add(value)
+        result.put(key, s)
+      }
+    }
+    result
+  }
+
+  // Construct the edges as a mapping of [ExprA, Set[ExprB, ExprC...]] such that A is
   //the expression where a value is defined which is used as an
-  //operand in B
+  //operand in B and C and ...
   // If B is Bottom already we do not bother creating an edge, since B
   //cannot be changed by any influence from A.
   // If ExprB is a Move we have a special case to ensure we do not
   //create self-edges based on a local var being defined and used as
   //an operand
-  def constructSsaEdges(exprMap:Map[Int, Expr]): HashMap[Expr, Expr] =
+  def constructSsaEdges(exprMap:Map[Int, Expr]): HashMap[Expr, Set[Expr]] =
   {
-    var result:HashMap[Expr,Expr] = new HashMap[Expr,Expr]()
+    var result:HashMap[Expr,Set[Expr]] = new HashMap[Expr,Set[Expr]]()
     exprMap.foreach(e => {
       if (e._2.latVal != Bottom){
         e._2.instr match {
           case move:Move => 
             move.a match{
               case i:Immediate => // do nothing
-              case r:Register => result.put(exprMap(r.n), e._2)
-              case s:SSALocalVar => result.put(exprMap(s.hashCode()), e._2)
+              case r:Register => addToMappedSet(result, exprMap(r.n), e._2)
+              case s:SSALocalVar => addToMappedSet(result,
+  exprMap(s.hashCode()), e._2)
               // Nothing besides a register or an SSALocalVar could
               //wind up being a constant, so set this expression to
               //bottom premptively if it has any other operand
@@ -153,8 +231,9 @@ object cprop {
           case singleOp:Op =>
             singleOp.a match{
               case i:Immediate => // do nothing
-              case r:Register => result.put(exprMap(r.n), e._2)
-              case s:SSALocalVar => result.put(exprMap(s.hashCode()), e._2)
+              case r:Register => addToMappedSet(result, exprMap(r.n), e._2)
+              case s:SSALocalVar => addToMappedSet(result,
+  exprMap(s.hashCode()), e._2)
               // Nothing besides a register or an SSALocalVar could
               //wind up being a constant, so set this expression to
               //bottom premptively if it has any other operand
@@ -164,19 +243,21 @@ object cprop {
 
             singleOpt.a match{
               case i:Immediate => // do nothing
-              case r:Register => result.put(exprMap(r.n), e._2)
-              case s:SSALocalVar => result.put(exprMap(s.hashCode()), e._2)
+              case r:Register => addToMappedSet(result, exprMap(r.n), e._2)
+              case s:SSALocalVar => addToMappedSet(result,
+  exprMap(s.hashCode()), e._2)
               // Nothing besides a register or an SSALocalVar could
               //wind up being a constant, so set this expression to
               //bottom premptively if it has any other operand
               case _ => e._2.latVal = Bottom
             }
           case doubleOp:Opop => {
-
+            println("DOU: " + doubleOp)
             doubleOp.a match{
               case i:Immediate => // do nothing
-              case r:Register => result.put(exprMap(r.n), e._2)
-              case s:SSALocalVar => result.put(exprMap(s.hashCode()), e._2)
+              case r:Register => addToMappedSet(result, exprMap(r.n), e._2)
+              case s:SSALocalVar => addToMappedSet(result,
+  exprMap(s.hashCode()), e._2)
               // Nothing besides a register or an SSALocalVar could
               //wind up being a constant, so set this expression to
               //bottom premptively if it has any other operand
@@ -184,8 +265,9 @@ object cprop {
             }
             doubleOp.b match{
               case i:Immediate => // do nothing
-              case r:Register => result.put(exprMap(r.n), e._2)
-              case s:SSALocalVar => result.put(exprMap(s.hashCode()), e._2)
+              case r:Register => addToMappedSet(result, exprMap(r.n), e._2)
+              case s:SSALocalVar => addToMappedSet(result,
+  exprMap(s.hashCode()), e._2)
               // Nothing besides a register or an SSALocalVar could
               //wind up being a constant, so set this expression to
               //bottom premptively if it has any other operand
@@ -193,11 +275,11 @@ object cprop {
             }
           }
           case doubleOpt:Opopt => {
-
             doubleOpt.a match{
               case i:Immediate => // do nothing
-              case r:Register => result.put(exprMap(r.n), e._2)
-              case s:SSALocalVar => result.put(exprMap(s.hashCode()), e._2)
+              case r:Register => addToMappedSet(result, exprMap(r.n), e._2)
+              case s:SSALocalVar =>
+                addToMappedSet(result,exprMap(s.hashCode()), e._2)
               // Nothing besides a register or an SSALocalVar could
               //wind up being a constant, so set this expression to
               //bottom premptively if it has any other operand
@@ -205,13 +287,22 @@ object cprop {
             }
             doubleOpt.b match{
               case i:Immediate => // do nothing
-              case r:Register => result.put(exprMap(r.n), e._2)
-              case s:SSALocalVar => result.put(exprMap(s.hashCode()), e._2)
+              case r:Register => addToMappedSet(result, exprMap(r.n), e._2)
+              case s:SSALocalVar => addToMappedSet(result,
+  exprMap(s.hashCode()), e._2)
               // Nothing besides a register or an SSALocalVar could
               //wind up being a constant, so set this expression to
               //bottom premptively if it has any other operand
               case _ => e._2.latVal = Bottom
             }
+          }
+          case phi:Phi => {
+            phi.args.foreach(arg => {arg._2 match {
+                case DEAD =>
+                case _ => addToMappedSet(result,
+                  exprMap(arg._2.hashCode()), e._2)
+              }
+            })
           }
         }
       }
@@ -219,17 +310,16 @@ object cprop {
     result
   }
 
-
     def ssaToExpr(instr:SSA):Expr = {
       val expr = instr match{
-        case a:Enter => new Expr(Bottom, -1, a)
+        case a:Enter => new Expr(Bottom, a.num, a)
         case Entrypc => new Expr(Bottom, -1, Entrypc)
-        case a:Br => new Expr(Bottom, -1, a)
-        case a:Blbc => new Expr(Bottom, -1, a)
-        case a:Blbs => new Expr(Bottom, -1, a)
-        case a:Call => new Expr(Bottom, -1, a)
-        case a:Ret => new Expr(Bottom, -1, a)
-        case a:Nop => new Expr(Bottom, -1, a)
+        case a:Br => new Expr(Bottom, a.num, a)
+        case a:Blbc => new Expr(Bottom, a.num, a)
+        case a:Blbs => new Expr(Bottom, a.num, a)
+        case a:Call => new Expr(Bottom, a.num, a)
+        case a:Ret => new Expr(Bottom, a.num, a)
+        case a:Nop => new Expr(Bottom, a.num, a)
         case a:Add => new Expr(initialEval(a), a.num, a)
         case a:Sub => new Expr(initialEval(a), a.num, a)
         case a:Mul => new Expr(initialEval(a), a.num, a)
@@ -239,21 +329,21 @@ object cprop {
         case a:Cmpeq => new Expr(initialEval(a), a.num, a)
         case a:Cmple => new Expr(initialEval(a), a.num, a)
         case a:Cmplt => new Expr(initialEval(a), a.num, a)
-        case a:Isnull => new Expr(Bottom, -1, a)
-        case a:Istype => new Expr(Bottom, -1, a)
+        case a:Isnull => new Expr(Bottom, a.num, a)
+        case a:Istype => new Expr(Bottom, a.num, a)
         case a:Load => new Expr(Bottom, a.num, a)
-        case a:Store => new Expr(initialEval(a), -1, a)
+        case a:Store => new Expr(initialEval(a), a.num, a)
         case a:Move => new Expr(initialMoveEval(a), getMoveSource(a), a)
-        case a:New => new Expr(Bottom, -1, a)
-        case a:Newlist => new Expr(Bottom, -1, a)
-        case a:Checknull => new Expr(Bottom, -1, a)
-        case a:Checktype => new Expr(Bottom, -1, a)
-        case a:Checkbounds => new Expr(Bottom, -1, a)
-        case a:Lddynamic => new Expr(Bottom, -1, a)
-        case a:Stdynamic => new Expr(initialEval(a), -1, a)
-        case a:Write => new Expr(Bottom, -1, a)
-        case a:Wrl => new Expr(Bottom, -1, a)
-        case a:Param => new Expr(Bottom, -1, a)
+        case a:New => new Expr(Bottom, a.num, a)
+        case a:Newlist => new Expr(Bottom, a.num, a)
+        case a:Checknull => new Expr(Bottom, a.num, a)
+        case a:Checktype => new Expr(Bottom, a.num, a)
+        case a:Checkbounds => new Expr(Bottom, a.num, a)
+        case a:Lddynamic => new Expr(Bottom, a.num, a)
+        case a:Stdynamic => new Expr(initialEval(a), a.num, a)
+        case a:Write => new Expr(Bottom, a.num, a)
+        case a:Wrl => new Expr(Bottom, a.num, a)
+        case a:Param => new Expr(Bottom, a.num, a)
         case a:Phi => new Expr(Top, getPhiSource(a), a)
       }
       if (expr.latVal == Const){
@@ -304,7 +394,6 @@ object cprop {
     }
 
     def initialMoveEval(move:Move): LatticeValue ={
-      println(move.a.getClass() + " : " + move.b.getClass())
       val latVal = move.a match {
         case _:Immediate => Const
         case _:Register => Top
@@ -406,7 +495,7 @@ object cprop {
     // phi.a ought to only ever be a local of the form "x$0" at this
     //point
     def getPhiSource(phi:Phi): Int = {
-      phi.a.hashCode()
+      phi.ssa.hashCode()
     }
 
 
