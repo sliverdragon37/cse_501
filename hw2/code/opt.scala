@@ -44,6 +44,7 @@ object main {
 
     //Run all optimizations that require SSA
     CFGs.foreach(cprop.runCprop(_))
+    CFGs.foreach(valnum.runValnum(_))
 
     //convert back out of SSA
     CFGs.foreach(_.fromSSA)

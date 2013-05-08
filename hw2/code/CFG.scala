@@ -119,7 +119,7 @@ class Block(pStart:Int, pEnd:Int, pName:String, pBlocks:ListBuffer[Block]){
     }
 
     instrs = new ListBuffer[SIR with Instr]
-    instrsSSA.flatMap(conv).foreach(instrs.append(_))
+    instrsSSA.flatMap(conv).filter(_.live).foreach(instrs.append(_))
 
     toInsert
   }

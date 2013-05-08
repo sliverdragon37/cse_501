@@ -29,6 +29,7 @@ sealed trait BooleanT {
 }
 
 sealed trait SIR {
+  var live = true
   def opMap(f:(Operand => Operand)):Unit = {
   }
 }
@@ -39,7 +40,7 @@ sealed trait Instr {
   override def toString = "    instr " + num.toString + ": " + repr
 }
 
-sealed trait SSA {
+sealed trait SSA extends SIR {
 
 }
 
@@ -140,7 +141,8 @@ case class Location(n:Int) extends Operand { override def toString = "[" + n + "
 case object GlobalPointer extends Operand { override def toString = "GP" }
 case object FramePointer extends Operand { override def toString = "FP" }
 case class Dest(b:Block) extends Operand { override def toString = "[" + b.firstInstrLocation + "]" }
-
+//vv only used in value numbering vv
+case class ValNum(parent:Operand) extends Operand { override def toString = parent.toString }
 
 //IR header info
 case class TypeDeclaration(name:String,args:List[(String,Int,IRType)]) extends Declaration { override def toString = "    type " + name + ": " + argsToS(args) }
