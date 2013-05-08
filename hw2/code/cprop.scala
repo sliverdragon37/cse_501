@@ -54,7 +54,9 @@ object cprop {
     workList = constructWorkList(ssaEdges)
 
 
+
     // propagate
+    var stuck = false
     while (!workList.isEmpty){
       var work = workList.dequeue()
 
@@ -62,6 +64,7 @@ object cprop {
         case phi:Phi => wellDefinedPhi(phi, exprMap)
         case _ => true
       })){
+        stuck = false
         // Just need to look at source and target of this edge
         var temp = eval(work._1, work._2, exprMap)
         if (temp != work._2.latVal){
@@ -77,11 +80,9 @@ object cprop {
       // Not all the Phi's args were defined, requeue
       else {
         work._2.instr match {
-          case phi:Phi => workList.enqueue(work)
+          case phi:Phi => stuck = true; if (!stuck){workList.enqueue(work)}
           case _ => //do nothing
         }
-//if (work._2.instr == Phi){
-  
       }
     }
 
@@ -104,14 +105,8 @@ object cprop {
     //immmediates, we can now remove all expressions marked as Const
     //EXCEPT Move expressions leading to a non-Const Phi node
 
-//    println("EXPR MAP: ")
-//      exprList.sortBy(e => e.instr.num).foreach(e => println(e))
-/*    println("___")
-    exitList.foreach(e => println(e))
-
     println("Function: " + cfg.name)
     println("Number of constants propagated: " + propCount)
-    exitList*/
     }
 
   def mutateInstructions(block:Block, exprMap:Map[Int, Expr]){
