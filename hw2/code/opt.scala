@@ -7,13 +7,34 @@ object main {
 
   def main(args:Array[String]) {
 
-    //first arg input file name, second output file name
+        //first arg input file name, second output file name
     val infname = args(0)
     val inlines = Source.fromFile(infname).getLines.toList
 
     val outfname = args(1)
 
     val I = inlines.dropRight(1)
+
+
+    var ssa = false
+    var sce = false
+    var scp = false
+    var cnt:Int = 2
+    while (cnt < args.length){
+      if (args(cnt) == "ssa"){
+        ssa = true
+      }
+
+      if (args(cnt) == "sce"){
+        sce = true
+      }
+
+      if (args(cnt) == "scp"){
+        scp = true
+      }
+      cnt+=1
+    }
+
 
     //parse intermediate representation
     val IR = I.map(SIRParser.runParser)
@@ -39,15 +60,21 @@ object main {
     //List[Instr] notation
     CFGs.foreach(_.finishConstruction)
 
-    //convert each CFG to SSA
-    CFGs.foreach(_.toSSA)
+    if (ssa){
+      //convert each CFG to SSA
+      CFGs.foreach(_.toSSA)
 
-    //Run all optimizations that require SSA
-    CFGs.foreach(cprop.runCprop(_))
-    CFGs.foreach(valnum.runValnum(_))
+      //Run all optimizations that require SSA
+      if (scp){
+        CFGs.foreach(cprop.runCprop(_))
+      }
+      if (sce){
+        CFGs.foreach(valnum.runValnum(_))
+      }
 
-    //convert back out of SSA
-    CFGs.foreach(_.fromSSA)
+      //convert back out of SSA
+      CFGs.foreach(_.fromSSA)
+    }
 
     //renumber instructions
     var i = 1

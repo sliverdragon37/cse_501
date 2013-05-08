@@ -1,13 +1,26 @@
 #!/bin/bash
 
-START_PATH="/home/emullen/Dropbox/grad_cs/501/start"
-REPO_PATH="/home/emullen/Dropbox/grad_cs/501/cse_501"
+# Replaced absolute paths with relative paths
+#START_PATH="/Users/plvines/Documents/Compilers/start"
+#REPO_PATH="/Users/plvines/Documents/Compilers/cse_501"
+START_PATH="../../../start"
+REPO_PATH="../../"
 HW="hw2"
 
+if [ -z "$2" ]
+then
 FILE=$1
+ARGS=""
+
+else
+FILE=$2
+OPTS=$1
+
+ARGS=${OPTS#-opt=}
+ARGS=${ARGS//,/ }
+fi
 
 IR=${FILE%.*}.sir
-
 OPT=${FILE%.*}.opt
 
 #grab and compile to IR
@@ -18,7 +31,11 @@ dart $START_PATH/bin/start.dart -c $FILE > $IR
 rm -f $OPT
 
 #run our script to optimize the IR
-scala -classpath $REPO_PATH/$HW/code main $IR $OPT
+scala -classpath $REPO_PATH/$HW/code main $IR $OPT $ARGS
 
 #run the IR
-dart $START_PATH/bin/start.dart -r $OPT
+dart $START_PATH/bin/start.dart -r --stats $OPT 
+
+
+
+
