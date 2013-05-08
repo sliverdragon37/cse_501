@@ -8,7 +8,8 @@ case object Bottom extends LatticeValue
 case object Const extends LatticeValue
 
 // Class for an expression for cprop purposes
-class Expr (var latVal:LatticeValue, var sourceVal:Int, var instr:Instr){
+class Expr (var latVal:LatticeValue, var sourceVal:Int, var instr:SIR
+    with Instr){
   var constVal = 0;
 
   override def toString = {
@@ -19,7 +20,8 @@ class Expr (var latVal:LatticeValue, var sourceVal:Int, var instr:Instr){
 
 object cprop {
 
-  def runCprop(cfg:CFG): List[Instr] = {
+  def runCprop(cfg:CFG) {
+    var propCount = 0
     var exprMap:HashMap[Int, Expr] = new HashMap[Int, Expr]()
     var ssaEdges:HashMap[Expr, Set[Expr]] = new HashMap[Expr, Set[Expr]]()
     var workList:Queue[(Expr,Expr)] = new Queue[(Expr, Expr)]()
@@ -28,9 +30,8 @@ object cprop {
     cfg.list.foreach(c => {
       //println(c.instrsSSA.size);
       //      c.instrsSSA.foreach(i => println(i));
-      c.instrsSSA.foreach(ins => instrList += ins)})
+      c.instrsSSA.foreach(ins => exprList += ssaToExpr(ins))})
 
-    exprList = instrList.map(i => ssaToExpr(i))
 //println("EXPLIST")
 //    exprList.foreach(e => println(e))
 //    println(exprList.size)
@@ -66,6 +67,7 @@ object cprop {
         if (temp != work._2.latVal){
           work._2.latVal = temp
           if (work._2.latVal == Const){
+            propCount += 1
             work._2.constVal = updateConstVal(work._2, exprMap)
           }
           // add children to worklist
@@ -73,16 +75,29 @@ object cprop {
         }
       }
       // Not all the Phi's args were defined, requeue
-      else if (work._2.instr == Phi){
-        workList.enqueue(work)
+      else {
+        work._2.instr match {
+          case phi:Phi => workList.enqueue(work)
+          case _ => //do nothing
+        }
+//if (work._2.instr == Phi){
+  
       }
     }
 
     // at this point every expression should be either Bottom or Const
     // Now iterate through all expressions, any (except Phi!) with
     //const operands we can replace with an immediate value
-    val exitList = exprMap.filter(e => !deadExpr(e._2, ssaEdges)).map(e =>
-    {replaceConstOperands(e._2, exprMap)}).toList.sortBy(i => i.num)
+//  val exitList = exprMap.filter(e => !deadExpr(e._2, ssaEdges)).foreach(e =>
+//    {replaceConstOperands(cfg., e._2,exprMap)}).toList
+
+    // mark dead expressions
+    exprList.foreach(e => {if (deadExpr(e, ssaEdges)) {e.instr.live = false}})
+
+
+    // go through each instruction in the CFG, look it up in exprMap,
+    //change its operands or reassign it
+    cfg.list.foreach(b => mutateInstructions(b, exprMap))
 
 
     // After having replace all constant reference values with
@@ -91,48 +106,52 @@ object cprop {
 
 //    println("EXPR MAP: ")
 //      exprList.sortBy(e => e.instr.num).foreach(e => println(e))
-//    println("___")
-//    exitList.foreach(e => println(e))
-    exitList
+/*    println("___")
+    exitList.foreach(e => println(e))
+
+    println("Function: " + cfg.name)
+    println("Number of constants propagated: " + propCount)
+    exitList*/
     }
 
-  // Checks that all arguments of a phi node are non-Top
-  def wellDefinedPhi(phi:Phi, exprMap:Map[Int, Expr]):Boolean = {
-    phi.args.forall (arg => arg._2 == DEAD || exprMap(arg._2.hashCode()).latVal != Top)
-  }
-
-  def getOpVal(op:Operand, exprMap:Map[Int, Expr]): Int ={
-    val result = op match{
-      case i:Immediate => i.n
-      case r:Register => exprMap(r.n).constVal
-      case s:SSALocalVar => exprMap(s.hashCode()).constVal
-      case _ => 0
-    }
-    result
-  }
-
-  def getOpTypeAndVal(op:Operand, exprMap:Map[Int, Expr]): (LatticeValue, Int) = {
-    val result = op match{
-      case i:Immediate => (Const, i.n)
-      case r:Register => (exprMap(r.n).latVal, exprMap(r.n).constVal)
-      case s:SSALocalVar => (exprMap(s.hashCode()).latVal, exprMap(s.hashCode()).constVal)
-      case _ => (Bottom, 0)
-    }
-    result
-  }
-
-  // Returns true if the expr is constant and either has no
-  //expressions using it or none of them are phi nodes
-  def deadExpr(expr:Expr, ssaEdges:Map[Expr, Set[Expr]]): Boolean = {
-    (expr.latVal == Const) && (!ssaEdges.contains(expr) || (ssaEdges(expr).forall(e => e.instr != Phi)))
+  def mutateInstructions(block:Block, exprMap:Map[Int, Expr]){
+    var i = 0
+    block.instrsSSA.foreach(instr => {
+      val newInstr = replaceConstOperands(instr, exprMap)
+      newInstr match{
+        case br:Br => instr match {
+          case condBranch:Blbc => block.instrsSSA = block.instrsSSA.updated(i, newInstr)
+          case condBranch:Blbs => block.instrsSSA = block.instrsSSA.updated(i, newInstr)
+          case _ => //do nothing
+        }
+        case nop:Nop => instr match{
+          case condBranch:Blbc => block.instrsSSA = block.instrsSSA.updated(i, newInstr)
+          case condBranch:Blbs => block.instrsSSA = block.instrsSSA.updated(i, newInstr)
+          case _ => //do nothing          
+        }
+        case _ => // do nothing
+      }
+      i += 1
+    })
   }
 
   // Check the operand(s) of expr; if any of them are constant,
   //replace them in this expr with immediates based on their constVal
   //field, UNLESS this expr is a Phi node
-  def replaceConstOperands(expr:Expr, exprMap:Map[Int, Expr]): Instr =
+  def replaceConstOperands(instr:SSA, exprMap:Map[Int, Expr]): SSA =
   {
-    val result = expr.instr match{
+
+    instr match{
+      case phi:Phi => instr.live =
+        exprMap(phi.ssa.hashCode()).instr.live
+      case move:Move => instr.live =
+        exprMap(move.b.hashCode()).instr.live
+      case Entrypc => // do nothing
+      case ins:Instr => instr.live = exprMap(ins.num).instr.live
+      case _ => // do nothing
+    }
+
+ val result =   instr match{
       case phi:Phi => phi// do nothing
       case nop:Nop => nop
       case move:Move => {
@@ -230,10 +249,46 @@ object cprop {
         }
           doubleOp
       }
-      case instr:Instr => instr // do nothing
+      case instr:SIR with Instr => instr // do nothing
     }
     result
   }
+
+  // Checks that all arguments of a phi node are non-Top
+  def wellDefinedPhi(phi:Phi, exprMap:Map[Int, Expr]):Boolean = {
+    phi.args.forall (arg => arg._2 == DEAD || exprMap(arg._2.hashCode()).latVal != Top)
+  }
+
+  def getOpVal(op:Operand, exprMap:Map[Int, Expr]): Int ={
+    val result = op match{
+      case i:Immediate => i.n
+      case r:Register => exprMap(r.n).constVal
+      case s:SSALocalVar => exprMap(s.hashCode()).constVal
+      case _ => 0
+    }
+    result
+  }
+
+  def getOpTypeAndVal(op:Operand, exprMap:Map[Int, Expr]): (LatticeValue, Int) = {
+    val result = op match{
+      case i:Immediate => (Const, i.n)
+      case r:Register => (exprMap(r.n).latVal, exprMap(r.n).constVal)
+      case s:SSALocalVar => (exprMap(s.hashCode()).latVal, exprMap(s.hashCode()).constVal)
+      case _ => (Bottom, 0)
+    }
+    result
+  }
+
+  // Returns true if the expr is constant and either has no
+  //expressions using it or none of them are phi nodes
+  def deadExpr(expr:Expr, ssaEdges:Map[Expr, Set[Expr]]): Boolean = {
+    (expr.latVal == Const) && (!ssaEdges.contains(expr) ||
+      (ssaEdges(expr).forall(e => e.instr match {
+        case _:Phi => false;
+        case _ => true
+      })))
+  }
+
 
   // Add the pairs of (expr, expr2) for each expr2 in the set of
   //ssaEdges corresponding to expr
@@ -569,7 +624,7 @@ object cprop {
     // If all the operands are immediates, return Const.
     // If one or more operands are parameters, return Bottom
     // Otherwise return Top
-    def initialEval(instr:Instr): LatticeValue = {
+    def initialEval(instr:SIR with Instr): LatticeValue = {
       val latVal = instr match {
         case singleOp:Op => {
           singleOp.a match{
