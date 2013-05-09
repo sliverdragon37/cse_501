@@ -77,7 +77,7 @@ object main {
         CFGs.foreach(cprop.runCprop(_))
       }
       if (cse){
-        CFGs.foreach(valnum.runValnum(_))
+        CFGs.foreach(valuenumbering.runValnum(_))
       }
 
 

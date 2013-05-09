@@ -13,7 +13,7 @@ import scala.collection.mutable._
 //specifically, the optimization below is the DVNT global value numbering
 //optimization described by Briggs, Cooper and Simpson
 
-object valnum {
+object valuenumbering {
 
   //sealed trait valop {}
 
