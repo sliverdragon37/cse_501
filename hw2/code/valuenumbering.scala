@@ -83,7 +83,7 @@ object valuenumbering {
                       }
                       case None => {
                         val r = Register(i.num)
-                        val vnum = ValNum(r)
+                        val vnum = ValNumber(r)
                         availBinExp.put((op,v1,v2),vnum)
                         binLocal.add((op,v1,v2))
                         availVal.put(r,vnum)
@@ -93,7 +93,7 @@ object valuenumbering {
                   }
                   case _ => {
                     val r = Register(i.num)
-                    val vnum = ValNum(r)
+                    val vnum = ValNumber(r)
                     availBinExp.put((op,v1,v2),vnum)
                     binLocal.add((op,v1,v2))
                     availVal.put(r,vnum)
@@ -103,8 +103,31 @@ object valuenumbering {
               }
             }
           }
-          case _ => {
-
+          case (a,b) => {
+            val vna = a match {
+              case vn:ValNum => vn
+              case _ => {
+                val vn = ValNumber(a)
+                availVal.put(a,vn)
+                valLocal.add(a)
+                vn
+              }
+            }
+            val vnb = b match {
+              case vn:ValNum => vn
+              case _ => {
+                val vn = ValNumber(b)
+                availVal.put(b,vn)
+                valLocal.add(b)
+                vn
+              }
+            }
+            val res = Register(i.num)
+            val vn = ValNumber(res)
+            availVal.put(res,vn)
+            valLocal.add(res)
+            availBinExp.put((op,vna,vnb),vn)
+            binLocal.add((op,vna,vnb))
           }
         }
       }
@@ -123,7 +146,7 @@ object valuenumbering {
               }
               case None => {
                 val r = Register(i.num)
-                val vnum = ValNum(r)
+                val vnum = ValNumber(r)
                 availUnExp.put((op,v),vnum)
                 unLocal.add((op,v))
                 availVal.put(r,vnum)
@@ -131,8 +154,22 @@ object valuenumbering {
               }
             }
           }
-          case _ => {
-
+          case v => {
+            val res = Register(i.num)
+            val vn = ValNumber(res)
+            availVal.put(res,vn)
+            valLocal.add(res)
+            val vna = availVal.get(v) match {
+              case Some(vn) => vn
+              case None => {
+                val vn = ValNumber(v)
+                availVal.put(v,vn)
+                valLocal.add(v)
+                vn
+              }
+            }
+            availUnExp.put((op,vna),vn)
+            unLocal.add((op,vna))
           }
         }
       }
@@ -147,7 +184,10 @@ object valuenumbering {
               case Some(vn) => vn
               case None => r
             }
-            case l:SSALocalVar => availVal(l)
+            case l:SSALocalVar => availVal.get(l) match {
+              case Some(vn) => vn
+              case None => l
+            }
             case _ => o
           }
         }
@@ -163,7 +203,10 @@ object valuenumbering {
             case f::r => if (r.exists(_ != f)) {
               None
             } else {
-              f
+              //can't actualy prove here
+              //that phi node is useless
+              //f
+              None
             }
           }
         }
@@ -174,7 +217,7 @@ object valuenumbering {
               //phi has more than one vnum
               //or is completely dead
               case None => {
-                availVal.put(p.a,ValNum(p.a))
+                availVal.put(p.a,ValNumber(p.a))
                 valLocal.add(p.a)
               }
               //phi has exactly one vnum

@@ -104,7 +104,7 @@ case object IntType extends PrimitiveType with NumberT { override def toString =
 case object BoolType extends PrimitiveType with BooleanT { override def toString = "bool" }
 
 case class Register(n:Int) extends Operand { override def toString = "(" + n + ")" }
-case class Immediate(n:Int) extends Operand { override def toString = n.toString }
+case class Immediate(n:Int) extends ValNum { override def toString = n.toString }
 case class Base(s:String,n:Option[Int]) extends Operand with LocalRep
 case class Offset(s:String,n:Option[Int]) extends Operand with LocalRep
 case class TypeOper(s:String,n:Option[Int]) extends Operand with LocalRep
@@ -142,7 +142,8 @@ case object GlobalPointer extends Operand { override def toString = "GP" }
 case object FramePointer extends Operand { override def toString = "FP" }
 case class Dest(b:Block) extends Operand { override def toString = "[" + b.firstInstrLocation + "]" }
 //vv only used in value numbering vv
-case class ValNum(parent:Operand) extends Operand { override def toString = parent.toString }
+trait ValNum extends Operand
+case class ValNumber(parent:Operand) extends ValNum { override def toString = parent.toString }
 
 //IR header info
 case class TypeDeclaration(name:String,args:List[(String,Int,IRType)]) extends Declaration { override def toString = "    type " + name + ": " + argsToS(args) }
