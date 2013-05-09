@@ -17,7 +17,7 @@ object main {
 
 
     var ssa = false
-    var sce = false
+    var cse = false
     var scp = false
     var cnt:Int = 2
     while (cnt < args.length){
@@ -25,8 +25,8 @@ object main {
         ssa = true
       }
 
-      if (args(cnt) == "sce"){
-        sce = true
+      if (args(cnt) == "cse"){
+        cse = true
       }
 
       if (args(cnt) == "scp"){
@@ -76,7 +76,7 @@ object main {
       if (scp){
         CFGs.foreach(cprop.runCprop(_))
       }
-      if (sce){
+      if (cse){
         CFGs.foreach(valnum.runValnum(_))
       }
 

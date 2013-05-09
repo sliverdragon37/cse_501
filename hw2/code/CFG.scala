@@ -140,8 +140,8 @@ class Block(pStart:Int, pEnd:Int, pName:String, pBlocks:ListBuffer[Block]){
           p.args.foreach({ b => {
             val block = b._1
             val loc = b._2
-            //don't insert dead moves
-            if (b._2 != DEAD) {
+            //don't insert moves to dead or moves for dead phi nodes
+            if (b._2 != DEAD && p.live) {
               toInsert ::= ((block,Move(b._2,p.ssa)))
             }
           }})

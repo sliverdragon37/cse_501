@@ -37,7 +37,7 @@ object valnum {
   type Bin = (Valbinop,ValNum,ValNum)
   type Un = (Valunaryop,ValNum)
 
-  def runValnum(cfg:CFG) = {
+  def runValnum(cfg:CFG):Unit = {
     //available expressions go here
     val availBinExp:HashMap[Bin,ValNum] = new HashMap[Bin,ValNum]()
     val availUnExp:HashMap[Un,ValNum] = new HashMap[Un,ValNum]()
@@ -45,8 +45,10 @@ object valnum {
     //available values go here (registers and locals)
     val availVal:HashMap[Operand,ValNum] = new HashMap[Operand,ValNum]()
 
+    var numEliminated = 0
 
     def dvnt(b:Block):Unit = {
+
 
       val binLocal = new HashSet[Bin]()
       val unLocal = new HashSet[Un]()
@@ -65,6 +67,7 @@ object valnum {
                 availVal.put(r,vnum)
                 valLocal.add(r)
                 i.live = false
+                numEliminated += 1
               }
               //if doesn't have val num
               //see if it commutes
@@ -77,6 +80,7 @@ object valnum {
                         availVal.put(r,vnum)
                         valLocal.add(r)
                         i.live = false
+                        numEliminated += 1
                       }
                       case None => {
                         val r = Register(i.num)
@@ -101,7 +105,7 @@ object valnum {
             }
           }
           case _ => {
-            //TODO: really do nothing here?
+
           }
         }
       }
@@ -116,6 +120,7 @@ object valnum {
                 availVal.put(r,vnum)
                 valLocal.add(r)
                 i.live = false
+                numEliminated += 1
               }
               case None => {
                 val r = Register(i.num)
@@ -128,7 +133,7 @@ object valnum {
             }
           }
           case _ => {
-            //TODO: really do nothing here?
+
           }
         }
       }
@@ -174,6 +179,8 @@ object valnum {
               case Some(vnum) => {
                 availVal.put(p.a,vnum)
                 valLocal.add(p.a)
+                p.live = false
+                numEliminated += 1
               }
             }
           }
@@ -221,5 +228,8 @@ object valnum {
       binLocal.foreach(availBinExp.remove(_))
       unLocal.foreach(availUnExp.remove(_))
     }
+
+    println("Function: " + cfg.name)
+    println("Number instructions eliminated: " + numEliminated)
   }
 }
