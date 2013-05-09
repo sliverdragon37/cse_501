@@ -181,7 +181,7 @@ case class Checknull(var a:Operand,t:IRType) extends Opt with Instr with SSA { d
 case class Checktype(var a:Operand,var b:Operand,t:IRType) extends Opopt with Instr with SSA { def repr = "checktype " + a + " " + b + " :" + t }
 case class Checkbounds(var a:Operand,var b:Operand) extends Opop with Instr with SSA { def repr = "checkbounds " + a + " " + b }
 case class Lddynamic(var a:Operand,var b:Operand,t:IRType) extends Opopt with Instr with SSA { def repr = "lddynamic " + a + " " + b + " :" + t }
-case class Stdynamic(var a:Operand,var b:Operand) extends Opop with Instr with SSA { def repr = "stdynamic " + a + " " + b }
+case class Stdynamic(var a:Operand,var b:Operand,var c:Option[Operand]) extends Opopop with Instr with SSA { def repr = "stdynamic " + a + " " + b + " " + (c match { case Some(x) => x })}
 case class Write(var a:Operand) extends Op with Instr with SSA { def repr = "write " + a }
 case class Wrl() extends SIR with Instr with SSA { def repr = "wrl" }
 case class Param(var a:Operand) extends Op with Instr with SSA { def repr = "param " + a }

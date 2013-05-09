@@ -98,7 +98,8 @@ object SIRParser extends StandardTokenParsers {
       ("checktype" ~> oparg ~ oparg ~ ":" ~ typ ^^ {case a1 ~ a2 ~ _ ~ t => Checktype(a1,a2,t) }) |
       ("checkbounds" ~> oparg ~ oparg ^^ {case a1 ~ a2 => Checkbounds(a1,a2) }) |
       ("lddynamic" ~> oparg ~ oparg ~ ":" ~ typ ^^ {case a1 ~ a2 ~ _ ~ t => Lddynamic(a1,a2,t) }) |
-      ("stdynamic" ~> oparg ~ oparg ^^ {case a1 ~ a2 => Stdynamic(a1,a2) }) |
+      ("stdynamic" ~> oparg ~ oparg ~ oparg ^^ {case a1 ~ a2 ~ a3 => Stdynamic(a1,a2,Some(a3)) }) |
+
       ("write" ~> oparg ^^ {case a => Write(a) }) |
       ("wrl" ^^ {case _ => Wrl() }) |
       ("enter" ~> imm ^^ {case n => Enter(n)}) |

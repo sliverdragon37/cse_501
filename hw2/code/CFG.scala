@@ -222,7 +222,7 @@ class Block(pStart:Int, pEnd:Int, pName:String, pBlocks:ListBuffer[Block]){
         case Checktype(a,b,t) => Checktype(use(a),use(b),t)
         case Checkbounds(a,b) => Checkbounds(use(a),use(b))
         case Lddynamic(a,b,t) => Lddynamic(use(a),use(b),t)
-        case Stdynamic(a,b) => Stdynamic(use(a),use(b))
+        case Stdynamic(a,b,Some(c)) => Stdynamic(use(a),use(b),Some(use(c)))
         case Write(a) => Write(use(a))
         case Wrl() => Wrl()
         case Param(a) => Param(use(a))
