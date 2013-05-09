@@ -15,6 +15,9 @@ class Block(pStart:Int, pEnd:Int, pName:String, pBlocks:ListBuffer[Block]){
   var idom:Block = null
   var idom_level:Int = -1
 
+  //keep track of instruction order
+  var nextBlock:Block = null
+
   //children in the idom tree
   var children:ListBuffer[Block] = new ListBuffer[Block]()
 
@@ -29,6 +32,18 @@ class Block(pStart:Int, pEnd:Int, pName:String, pBlocks:ListBuffer[Block]){
   var phi:List[Phi] = List()
 
   private var renamed = false
+
+  //get rid of branches to next statement
+  def peepholeBranch = {
+    instrs.last match {
+      case Br(Dest(b)) => {
+        if (b == nextBlock) {
+          instrs = instrs.dropRight(1)
+        }
+      }
+      case _ => {}
+    }
+  }
 
   def toGraphVizDom:String = {
     val s = name + ";\n"
@@ -611,6 +626,18 @@ class CFG(header:MethodDeclaration, pEnd:Int, instrMap:HashMap[Int,SIR with Inst
       case o: Object => root.findBlock(instrLoc).handleBranch(instrLoc, branchTo, conditional, false)
     }
 
+  }
+
+  def peephole = {
+    //store next on each block
+    var prev = list.head
+    list.tail.foreach(t => {
+      prev.nextBlock = t
+      prev = t
+    })
+
+    //eliminate unneeded branches
+    list.foreach(_.peepholeBranch)
   }
 
   def renumber(i:Int,m:HashMap[Int,Int]):Int = {

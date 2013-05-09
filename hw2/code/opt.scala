@@ -89,6 +89,9 @@ object main {
 
     }
 
+    //run cleanup peephole optimizations
+    CFGs.foreach(_.peephole)
+
     //renumber instructions
     //(part of translation out of SSA)
     var i = 1
