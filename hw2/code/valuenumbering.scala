@@ -143,7 +143,10 @@ object valuenumbering {
         //replace all operands with value numbered ones
         def repl(o:Operand):Operand = {
           o match {
-            case r:Register => availVal(r)
+            case r:Register => availVal.get(r) match {
+              case Some(vn) => vn
+              case None => r
+            }
             case l:SSALocalVar => availVal(l)
             case _ => o
           }
@@ -212,6 +215,18 @@ object valuenumbering {
                   case _ => {}
                 }
               }
+            }
+          }
+          //propagate value numbers through copies
+          //can we mark the move dead here?
+          case Move(src,dst) => {
+            availVal.get(src) match {
+              case Some(vn) => {
+                availVal.put(dst,vn)
+                i.live = false
+                numEliminated += 1
+              }
+              case None => {}
             }
           }
           case _ => {
