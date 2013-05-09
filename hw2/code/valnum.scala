@@ -49,7 +49,6 @@ object valnum {
 
     def dvnt(b:Block):Unit = {
 
-
       val binLocal = new HashSet[Bin]()
       val unLocal = new HashSet[Un]()
       val valLocal = new HashSet[Operand]()
@@ -210,6 +209,7 @@ object valnum {
                 in match {
                   case i:Isnull => numberUnaryExp(in,isnull)
                   case c:Checknull => numberUnaryExp(in,checknull)
+                  case _ => {}
                 }
               }
             }
@@ -228,6 +228,8 @@ object valnum {
       binLocal.foreach(availBinExp.remove(_))
       unLocal.foreach(availUnExp.remove(_))
     }
+
+    dvnt(cfg.root)
 
     println("Function: " + cfg.name)
     println("Number instructions eliminated: " + numEliminated)

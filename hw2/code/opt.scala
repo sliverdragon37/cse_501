@@ -60,8 +60,8 @@ object main {
     //List[Instr] notation
     CFGs.foreach(_.finishConstruction)
 
-    println("Original code:")
-    CFGs.foreach(_.printInstrs)
+    // println("Original code:")
+    // CFGs.foreach(_.printInstrs)
 
     CFGs.foreach(_.dumpGraphViz(outfname + "_preopt"))
 
@@ -69,8 +69,8 @@ object main {
       //convert each CFG to SSA
       CFGs.foreach(_.toSSA)
 
-      println("SSA before optimization:")
-      CFGs.foreach(_.printSSA)
+      // println("SSA before optimization:")
+      // CFGs.foreach(_.printSSA)
 
       //Run all optimizations that require SSA
       if (scp){
@@ -81,8 +81,8 @@ object main {
       }
 
 
-      println("SSA after optimization:")
-      CFGs.foreach(_.printSSA)
+      // println("SSA after optimization:")
+      // CFGs.foreach(_.printSSA)
 
       //convert back out of SSA
       CFGs.foreach(_.fromSSA)
@@ -101,8 +101,8 @@ object main {
     }
     CFGs.foreach(_.reRegister(m))
 
-    println("Emitted code:")
-    CFGs.foreach(_.printInstrs)
+    // println("Emitted code:")
+    // CFGs.foreach(_.printInstrs)
 
     CFGs.foreach(_.dumpGraphViz(outfname + "_postopt"))
 
