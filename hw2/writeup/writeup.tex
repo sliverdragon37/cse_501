@@ -10,6 +10,7 @@ Homework 2: SSA, Constant Propagation, and Value Numbering\\
 Paul Vines and Eric Mullen\\
 CSE 501\\
 \end{flushright}
+\subsection*{Implementation}
 \subsubsection*{Translation to SSA}
 In order to transalte to SSA, we first calculate the dominance
 frontier, using the method provided in the slides. We store the
@@ -134,17 +135,55 @@ emitting.
 
 
 \begin{center}
-\includegraphics[width=4in]{/Users/plvines/Documents/Compilers/cse_501/hw2/writeup/class.png}
-\includegraphics[width=4in]{/Users/plvines/Documents/Compilers/cse_501/hw2/writeup/conditional.png}
-\includegraphics[width=4in]{/Users/plvines/Documents/Compilers/cse_501/hw2/writeup/gcd.png}
-\includegraphics[width=4in]{/Users/plvines/Documents/Compilers/cse_501/hw2/writeup/link.png}
-\includegraphics[width=4in]{/Users/plvines/Documents/Compilers/cse_501/hw2/writeup/mmm.png}
-\includegraphics[width=4in]{/Users/plvines/Documents/Compilers/cse_501/hw2/writeup/points.png}
-\includegraphics[width=4in]{/Users/plvines/Documents/Compilers/cse_501/hw2/writeup/prime.png}
-\includegraphics[width=4in]{/Users/plvines/Documents/Compilers/cse_501/hw2/writeup/regslarge.png}
-\includegraphics[width=4in]{/Users/plvines/Documents/Compilers/cse_501/hw2/writeup/sieve.png}
-\includegraphics[width=4in]{/Users/plvines/Documents/Compilers/cse_501/hw2/writeup/sort.png}
-\includegraphics[width=4in]{/Users/plvines/Documents/Compilers/cse_501/hw2/writeup/struct.png}
+\includegraphics[width=3in]{class.png}
+\includegraphics[width=3in]{conditional.png}
+\includegraphics[width=3in]{gcd.png}
+\includegraphics[width=3in]{link.png}
+\includegraphics[width=3in]{mmm.png}
+\includegraphics[width=3in]{points.png}
+\includegraphics[width=3in]{prime.png}
+\includegraphics[width=3in]{regslarge.png}
+\includegraphics[width=3in]{sieve.png}
+\includegraphics[width=3in]{sort.png}
+\includegraphics[width=3in]{struct.png}
 \end{center}
+
+Above, you will see a graph for each example program that we used to
+test our optimizations. Most of these were included with start, but we
+added conditional to show off the fact that our constant propagation
+propagates through statically constant branches. The y-axis is number
+of dynamic cycles for an execution, and there is a bar for
+non-optimized code, as well as code translated in and out of SSA but
+not optimized, and translated into SSA with different combinations of
+SSA optimizations run.
+
+As you can see, translating to SSA without optimizing usually has no
+effect, or makes execution time worse. This is expected, as we add
+instructions to make SSA happen, but don't delete any. Applying
+constant propagation once in SSA makes some of the programs faster,
+specifically those with a lot of constants to propagate. In particular
+regslarge improves significantly with constant propagation, as the
+entire thing is a huge statically determinable arithmetic calculation.
+
+Likewise, value numbering made some programs substantially faster,
+while not really affecting others. The programs with large numbers of
+redundant computations benefitted the most, while those without lots
+of redundant computation were largely unaffected.
+
+Both of these optimizations were able to make these example programs
+faster, sometimes quite a bit. Further, every program was faster after
+optimization as opposed to in raw SSA form. Sadly, the translation to
+and from SSA had a fair amount of overhead, but we think we could get
+rid of some of that with a smarter translation back out of SSA.
+
+We tried running these optimizations more than one time, but that had
+no significant effect. Likewise, the order in which they are performed
+did not have any significant effect on the runtime of the output
+program.
+
+\subsection*{Code Statistics}
+
+Our final implementation is 1791 lines of Scala in 8 files. When
+compiled, they generate 527 distinct Java class files. 
 
 \end{document}
