@@ -60,9 +60,17 @@ object main {
     //List[Instr] notation
     CFGs.foreach(_.finishConstruction)
 
+    println("Original code:")
+    CFGs.foreach(_.printInstrs)
+
+    CFGs.foreach(_.dumpGraphViz(outfname + "_preopt"))
+
     if (ssa){
       //convert each CFG to SSA
       CFGs.foreach(_.toSSA)
+
+      println("SSA before optimization:")
+      CFGs.foreach(_.printSSA)
 
       //Run all optimizations that require SSA
       if (scp){
@@ -72,16 +80,28 @@ object main {
         CFGs.foreach(valnum.runValnum(_))
       }
 
+
+      println("SSA after optimization:")
+      CFGs.foreach(_.printSSA)
+
       //convert back out of SSA
       CFGs.foreach(_.fromSSA)
+
     }
 
     //renumber instructions
+    //(part of translation out of SSA)
     var i = 1
     var m:HashMap[Int,Int] = new HashMap[Int,Int]()
     for (c <- CFGs) {
       i = c.renumber(i,m)
     }
+    CFGs.foreach(_.reRegister(m))
+
+    println("Emitted code:")
+    CFGs.foreach(_.printInstrs)
+
+    CFGs.foreach(_.dumpGraphViz(outfname + "_postopt"))
 
     val tHeaders = headers collect { case t:TypeDeclaration => t }
     val gHeaders = headers collect { case g:GlobalDeclaration => g }

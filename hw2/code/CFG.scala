@@ -5,7 +5,7 @@ class Block(pStart:Int, pEnd:Int, pName:String, pBlocks:ListBuffer[Block]){
   //used for initialization
   var start:Int = pStart
   var end:Int = pEnd
-  val name:String = pName
+  def name = pName + "_" + instrs.head.num
   var blocks:ListBuffer[Block] = pBlocks
   pBlocks.append(this)
   var preds:ListBuffer[Block] = new ListBuffer[Block]()
@@ -29,6 +29,24 @@ class Block(pStart:Int, pEnd:Int, pName:String, pBlocks:ListBuffer[Block]){
   var phi:List[Phi] = List()
 
   private var renamed = false
+
+  def toGraphVizDom:String = {
+    val s = name + ";\n"
+    val parent = name + " -> " + idom.name + ";\n"
+    s + parent
+  }
+
+  def toGraphViz:String = {
+    val s = name + ";\n"
+    //val pre = succs.map(name + " -> " + _.name + ";\n").foldLeft("")(_+_)
+    val out = instrs.last match {
+      case Br(Dest(b)) => name + " -> " + b.name + ";\n"
+      case Blbc(_,Dest(b),Some(Dest(c))) => name + " -> " + b.name + ";\n" + name + " -> " + c.name + ";\n"
+      case Blbs(_,Dest(b),Some(Dest(c))) => name + " -> " + b.name + ";\n" + name + " -> " + c.name + ";\n"
+      case _ => ""
+    }
+    s + out
+  }
 
   def allocate(i:Int) = {
     def e(o:SIR with Instr):Boolean = {
@@ -234,7 +252,9 @@ class Block(pStart:Int, pEnd:Int, pName:String, pBlocks:ListBuffer[Block]){
   }
 
   def printInstrs {
+    println(name)
     instrs.foreach(println)
+    println()
   }
 
   def printSSA {
@@ -260,8 +280,24 @@ class Block(pStart:Int, pEnd:Int, pName:String, pBlocks:ListBuffer[Block]){
     val newEnd = iMap(end) match {
       //is an explicit branch at the end of this block
       case Br(Location(n)) => Br(Dest(bMap(n)))
-      case Blbc(a,Location(n),_) => Blbc(a,Dest(bMap(n)),Some(Dest(bMap(end + 1))))
-      case Blbs(a,Location(n),_) => Blbs(a,Dest(bMap(n)),Some(Dest(bMap(end + 1))))
+      case Blbc(a,Location(n),_) => {
+        val nn = Blbc(a,Dest(bMap(n)),Some(Dest(bMap(end + 1))))
+        nn.num = iMap(end).num
+        instrs.append(nn)
+        val m = Br(Dest(bMap(end + 1)))
+        m.num = util.instr_count
+        util.instr_count += 1
+        m
+      }
+      case Blbs(a,Location(n),_) => {
+        val nn = Blbs(a,Dest(bMap(n)),Some(Dest(bMap(end + 1))))
+        nn.num = iMap(end).num
+        instrs.append(nn)
+        val m = Br(Dest(bMap(end + 1)))
+        m.num = util.instr_count
+        util.instr_count += 1
+        m
+      }
       case r:Ret => r
         //there is no explicit branch, just fall through
         //add an explicit branch to next block
@@ -380,12 +416,33 @@ class CFG(header:MethodDeclaration, pEnd:Int, instrMap:HashMap[Int,SIR with Inst
   var start:Int = header.start
   var end:Int = pEnd-1
   instrMap.values.foreach(instr => handleInstr(instr, instrMap))
-  var list:ListBuffer[Block] = getTopoList
+  lazy val list:ListBuffer[Block] = getTopoList
 
   //mapping of local variables to all the blocks where they're defined
   var symTable:Map[Local,HashSet[Block]] = null
 
   var postSSAHeader:MethodDeclaration = null
+
+  def toGraphViz:String = {
+    "digraph G {" + list.map(_.toGraphViz).foldLeft("")(_+_) + "}"
+  }
+
+  def toGraphVizDom = {
+    "digraph G {" + list.map(_.toGraphVizDom).foldLeft("")(_+_) + "}"
+  }
+
+  def dumpGraphViz(s:String) = {
+    val outfname = s + name + ".gv"
+    val out_file = new java.io.FileOutputStream(outfname)
+    val out_stream = new java.io.PrintStream(out_file)
+    out_stream.print(toGraphViz)
+    out_stream.close
+    val domoutname = s + name + "_dom.gv"
+    val domoutfile = new java.io.FileOutputStream(domoutname)
+    val domoutstream = new java.io.PrintStream(domoutfile)
+    domoutstream.print(toGraphVizDom)
+    domoutstream.close
+  }
 
   def getHeader:MethodDeclaration = {
     if (postSSAHeader == null) {
@@ -476,7 +533,16 @@ class CFG(header:MethodDeclaration, pEnd:Int, instrMap:HashMap[Int,SIR with Inst
       val b = x._1
       val instr = x._2
       //always add move instructions right before the last branch
-      b.instrs = b.instrs.dropRight(1) ++ List(instr) ++ List(b.instrs.last)
+      def isBranch(s:SIR):Boolean = {
+        s match {
+          case x:Blbc => true
+          case x:Blbs => true
+          case x:Br => true
+          case x:Ret => true
+          case _ => false
+        }
+      }
+      b.instrs = b.instrs.filter(!isBranch(_)) ++ List(instr) ++ b.instrs.filter(isBranch)
     }
     toAdd.foreach(add)
     val locals = list.flatMap(_.getLocals)
@@ -552,8 +618,11 @@ class CFG(header:MethodDeclaration, pEnd:Int, instrMap:HashMap[Int,SIR with Inst
     for (b <- list) {
       x = b.renumber(x,m)
     }
-    list.foreach(_.reRegister(m))
     x
+  }
+
+  def reRegister(m:HashMap[Int,Int]) = {
+    list.foreach(_.reRegister(m))
   }
 
   def getTopoList() = {
@@ -577,9 +646,6 @@ class CFG(header:MethodDeclaration, pEnd:Int, instrMap:HashMap[Int,SIR with Inst
   }
 
   override def toString:String = {
-    if (list == null){
-      list = getTopoList()
-    }
     var str:String = name + "\n"
     list.foreach(b => str += ("# " + b.start + "\n\t"  + "Preds: " + b.preds.toList.mkString(", ") + "\n\t" + "Succs: " + b.succs.toList.mkString(", ") + "\n\t" + "idom: " + b.idom + "\n"))
     str
