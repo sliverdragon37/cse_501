@@ -289,6 +289,15 @@ object valuenumbering {
 
     dvnt(cfg.root)
 
+    def unNumber(o:Operand):Operand = {
+      o match {
+        case ValNumber(x) => x
+        case _ => o
+      }
+    }
+
+    cfg.list.foreach(_.instrsSSA.foreach(_.opMap(unNumber)))
+
     println("Function: " + cfg.name)
     println("Number instructions eliminated: " + numEliminated)
   }

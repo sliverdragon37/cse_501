@@ -123,7 +123,6 @@ class Block(pStart:Int, pEnd:Int, pName:String, pBlocks:ListBuffer[Block]){
       o match {
         case Register(n) => Register(m(n))
         case Location(n) => Location(m(n))
-        case ValNumber(o) => r(o)
         case _ => o
       }
     }
