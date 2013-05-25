@@ -190,6 +190,9 @@ case class Write(var a:Operand) extends Op with Instr with SSA { def repr = "wri
 case class Wrl() extends SIR with Instr with SSA { def repr = "wrl" }
 case class Param(var a:Operand) extends Op with Instr with SSA { def repr = "param " + a }
 
+//instrumentation instruction
+//todo: put support in parser for this
+case class Count(var a:Operand) extends Op with Instr with SSA { def repr = "count " + a }
 
 //phi functions
 case class Phi(a:Local) extends SSA with Instr {

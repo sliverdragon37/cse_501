@@ -5,7 +5,7 @@
 #REPO_PATH="/Users/plvines/Documents/Compilers/cse_501"
 START_PATH="../../../start"
 REPO_PATH="../../"
-HW="hw2"
+HW="hw3"
 
 if [ -z "$2" ]
 then
@@ -23,6 +23,7 @@ fi
 IR=${FILE%.*}.sir
 OPT=${FILE%.*}.opt
 
+echo "compiling start to IR"
 #grab and compile to IR
 dart $START_PATH/bin/start.dart -c $FILE > $IR
 
@@ -30,9 +31,11 @@ dart $START_PATH/bin/start.dart -c $FILE > $IR
 #-f for silent (doesn't complain when file not there)
 rm -f $OPT
 
+echo "running optimizer"
 #run our script to optimize the IR
 scala -classpath $REPO_PATH/$HW/code main $IR $OPT $ARGS
 
+echo "interpreting code"
 #run the IR
 dart $START_PATH/bin/start.dart -r --stats $OPT 
 

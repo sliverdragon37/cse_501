@@ -84,7 +84,7 @@ object main {
         CFGs.foreach(valuenumbering.runValnum(_))
       }
       if (cbr){
-        CFGs.foreach(profile.instrBranches(_))
+        profile.instrBranches(CFGs)
       }
 
       // println("SSA after optimization:")
