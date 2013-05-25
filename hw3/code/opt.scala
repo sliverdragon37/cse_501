@@ -7,7 +7,7 @@ object main {
 
   def main(args:Array[String]) {
 
-        //first arg input file name, second output file name
+    //first arg input file name, second output file name
     val infname = args(0)
     val inlines = Source.fromFile(infname).getLines.toList
 
@@ -19,6 +19,7 @@ object main {
     var ssa = false
     var cse = false
     var scp = false
+    var cbr = false
     var cnt:Int = 2
     while (cnt < args.length){
       if (args(cnt) == "ssa"){
@@ -31,6 +32,9 @@ object main {
 
       if (args(cnt) == "scp"){
         scp = true
+      }
+      if (args(cnt) == "cbr"){
+        cbr = true
       }
       cnt+=1
     }
@@ -79,7 +83,9 @@ object main {
       if (cse){
         CFGs.foreach(valuenumbering.runValnum(_))
       }
-
+      if (cbr){
+        CFGs.foreach(profile.instrBranches(_))
+      }
 
       // println("SSA after optimization:")
       // CFGs.foreach(_.printSSA)
