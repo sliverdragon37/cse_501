@@ -23,6 +23,7 @@ object main {
     var cse = false
     var scp = false
     var cbr = false
+    var mem = false
     var cnt:Int = 1
     while (cnt < args.length){
       if (args(cnt).takeRight(3) == "ssa"){
@@ -38,6 +39,9 @@ object main {
       }
       if (args(cnt).takeRight(3) == "cbr"){
         cbr = true
+      }
+      if (args(cnt).takeRight(3) == "mem"){
+        mem = true
       }
       cnt+=1
     }
@@ -120,12 +124,10 @@ object main {
     val mHeaders = CFGs.map(_.getHeader)
     val allHeaders = tHeaders ++ mHeaders ++ gHeaders
 
-    //write the optimized code back out to file
-    val out_file = new java.io.FileOutputStream(outfname)
-    val out_stream = new java.io.PrintStream(out_file)
     val instrsOpt = (allHeaders.map(_.toString).map(_ + "\n")) ++ (CFGs.flatMap(_.list.flatMap(_.instrs)).map(_.toString).map(_+"\n"))
-    instrsOpt.foreach(out_stream.print(_))
-    out_stream.close
+
+    //write the optimized code back out to file
+    util.writeToFile(instrsOpt,outfname)
 
     if (cbr) {
 
@@ -137,6 +139,17 @@ object main {
       //now we have branch profile information
       //do something interesting with it
       //TODO ^^
+
+    }
+
+    if (mem) {
+
+      //run program, get output
+      val output = (Seq("dart", "../../../start/bin/start.dart", "-r", outfname)).lines
+
+      val optProg = memoize.makeEquivProg(output)
+
+      util.writeToFile(optProg,outfname)
 
     }
   }

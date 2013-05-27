@@ -26,5 +26,12 @@ object util {
     m
   }
 
+  def writeToFile(s:List[String],fname:String) {
+    val out_file = new java.io.FileOutputStream(fname)
+    val out_stream = new java.io.PrintStream(out_file)
+    s.foreach(out_stream.print(_))
+    out_stream.close
+  }
+
   var instr_count = -1
 }
