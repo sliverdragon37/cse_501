@@ -557,6 +557,7 @@ object cprop {
         case a:Wrl => new Expr(Bottom, a.num, a)
         case a:Param => new Expr(Bottom, a.num, a)
         case a:Phi => new Expr(Top, getPhiSource(a), a)
+        case a:Count => throw new RuntimeException("Should not be propagating constants through instrumented code")
       }
       if (expr.latVal == Const){
         expr.constVal = getConstVal(instr)

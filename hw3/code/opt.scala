@@ -2,6 +2,7 @@ import scala.io.Source
 import java.io.FileOutputStream
 import java.io.PrintStream
 import scala.collection.mutable._
+import scala.sys.process._
 
 object main {
 
@@ -15,24 +16,27 @@ object main {
 
     val I = inlines.dropRight(1)
 
+    var branch_counters:HashMap[Int,(Block,Block)] = null
+    var branch_counts:HashMap[Int,Int] = null
+
     var ssa = false
     var cse = false
     var scp = false
     var cbr = false
-    var cnt:Int = 2
+    var cnt:Int = 1
     while (cnt < args.length){
-      if (args(cnt) == "ssa"){
+      if (args(cnt).takeRight(3) == "ssa"){
         ssa = true
       }
 
-      if (args(cnt) == "cse"){
+      if (args(cnt).takeRight(3) == "cse"){
         cse = true
       }
 
-      if (args(cnt) == "scp"){
+      if (args(cnt).takeRight(3) == "scp"){
         scp = true
       }
-      if (args(cnt) == "cbr"){
+      if (args(cnt).takeRight(3) == "cbr"){
         cbr = true
       }
       cnt+=1
@@ -83,7 +87,7 @@ object main {
         CFGs.foreach(valuenumbering.runValnum(_))
       }
       if (cbr){
-        profile.instrBranches(CFGs)
+        branch_counters = profile.instrBranches(CFGs)
       }
 
       // println("SSA after optimization:")
@@ -124,7 +128,16 @@ object main {
     out_stream.close
 
     if (cbr) {
-      //run code, get profile info, apply optimizations
+
+      //get the output of running the program once
+      val prof = (Seq("dart", "../../../start/bin/start.dart", "-r", "--stats", outfname)).lines
+
+      branch_counts = profile.getBranchCounts(prof)
+
+      //now we have branch profile information
+      //do something interesting with it
+      //TODO ^^
+
     }
   }
 }
