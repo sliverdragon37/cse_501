@@ -15,7 +15,6 @@ object main {
 
     val I = inlines.dropRight(1)
 
-
     var ssa = false
     var cse = false
     var scp = false
@@ -67,7 +66,7 @@ object main {
     // println("Original code:")
     // CFGs.foreach(_.printInstrs)
 
-    CFGs.foreach(_.dumpGraphViz(outfname + "_preopt"))
+    //CFGs.foreach(_.dumpGraphViz(outfname + "_preopt"))
 
     if (ssa){
       //convert each CFG to SSA
@@ -110,7 +109,7 @@ object main {
     // println("Emitted code:")
     // CFGs.foreach(_.printInstrs)
 
-    CFGs.foreach(_.dumpGraphViz(outfname + "_postopt"))
+    //CFGs.foreach(_.dumpGraphViz(outfname + "_postopt"))
 
     val tHeaders = headers collect { case t:TypeDeclaration => t }
     val gHeaders = headers collect { case g:GlobalDeclaration => g }
@@ -123,5 +122,9 @@ object main {
     val instrsOpt = (allHeaders.map(_.toString).map(_ + "\n")) ++ (CFGs.flatMap(_.list.flatMap(_.instrs)).map(_.toString).map(_+"\n"))
     instrsOpt.foreach(out_stream.print(_))
     out_stream.close
+
+    if (cbr) {
+      //run code, get profile info, apply optimizations
+    }
   }
 }
