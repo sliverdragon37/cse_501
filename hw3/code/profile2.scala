@@ -2,16 +2,17 @@ import scala.collection.mutable._
 
 object profile2 {
   def optimizeDynamic(cfgs:List[CFG], counterMap:HashMap[Int, (Block,
-    SSA)], resultsMap:HashMap[Int,Array[Int]]){
+    SIR with Instr, String)], resultsMap:HashMap[Int,Array[Int]], types:List[TypeDeclaration]){
 
-    def optimizeLddynamic(b:Block, cinstr:SSA, newOffset:Int){
+    def optimizeLddynamic(b:Block, cinstr:SIR with Instr, newOffset:Int){
+      System.out.println("RUNNING FOR OFFSET: " + newOffset)
       // find the cinstr in the block
-      if (b.instrsSSA.size > 8){
+      if (b.instrs.size > 8){
         // spanning from getting the location in memory for the object
         //base pointer, through the inserted counts, through the
         //dynamic load and checks, and up to the add just before the
         //load
-        val window = b.instrsSSA.sliding(8)
+        val window = b.instrs.sliding(8)
         val countLoc = 3
         val offsetAddLoc = 7
 
@@ -58,16 +59,40 @@ object profile2 {
         }
 
 
-        val leftHalf =b.instrsSSA.take(windowIndex + 1) :+ curWindow.last 
-        b.instrsSSA = leftHalf ++
-          b.instrsSSA.takeRight(b.instrsSSA.size - (curWindow.size + windowIndex))
+        val leftHalf =b.instrs.toList.take(windowIndex + 1) :+
+        curWindow.last 
+        val temp = new ListBuffer[SIR with SIR with Instr]()
+        b.instrs = temp ++ (leftHalf ++
+          b.instrs.takeRight(b.instrs.size - (curWindow.size +
+        windowIndex)))
 
       }
     }
 
-    optimizeLddynamic(counterMap(0)._1, counterMap(0)._2, 8)
+    def offsetLookup(index:Int, name:String):Int = {
+      var offset = 0
+      types.foreach(w => w.args.foreach(y => System.out.println(y._1 +
+      " " + y._2)))
+      if (index >= 5){
+        offset = (types(index - 5).args.find(x => x._1.equals(name))) match{
+          case Some(tuple) => tuple._2
+          case None => 0
+        }
+      }
+      System.out.println("INDEX: " + index + " : " + name + " : " + offset)
+      offset
+    }
 
-  }
+    val singleTypeResults = resultsMap.filter(w => w._2.sum == w._2.max
+      && w._2.sum > 0)
+
+
+    singleTypeResults.foreach(w => {System.out.println("ARRAY: " + w._1); (w._2.foreach(x =>System.out.println(x)))})
+    singleTypeResults.foreach(w =>
+      optimizeLddynamic(counterMap(w._1)._1, counterMap(w._1)._2,
+      offsetLookup(w._2.indexWhere(_ > 0), counterMap(w._1)._3)))
+    
+    }
 
 
   def getDynamicCounts(prof:Stream[String], numberOfTypes:Int):HashMap[Int,Array[Int]] = {
@@ -79,7 +104,6 @@ object profile2 {
 
     for (line <- prof) {
       if (c){
-        System.out.println("C is true!")
         val l = line.split(":")
         val counter = Integer.parseInt(l(0).trim)
         val value = Integer.parseInt(l(1).trim)
@@ -87,11 +111,8 @@ object profile2 {
         val counterNumber = counter >> 16
         val typeNumber = (counter << 16) >> 16
 
-        System.out.println("NUBMERS: " + counterNumber + " : " +
-        typeNumber + " : " + value)
 
         if (groupNumber != counterNumber) {
-          System.out.println("NEW GROUP: " + groupNumber + " : " + counterNumber)
           // put the old array into the map
           type_counts.put(groupNumber,typeCounts)
 
@@ -119,8 +140,8 @@ object profile2 {
         c.a = Register(a.num)
       }
 
-      if (b.instrsSSA.size > 3){
-        val window = b.instrsSSA.sliding(3)
+      if (b.instrs.size > 3){
+        val window = b.instrs.sliding(3)
 
         while (window.hasNext){
           val curWindow = window.next
@@ -141,9 +162,9 @@ object profile2 {
     cfgs.foreach(_.list.foreach(fixBlockRegisters))
   }
 
-  def countDynamic(cfgs:List[CFG]):HashMap[Int,(Block, SSA)] = {
+  def countDynamic(cfgs:List[CFG]):HashMap[Int,(Block, SIR with Instr, String)] = {
     var counter_counter = 0
-    val    dynamicCounters = new HashMap[Int,(Block, SSA)]
+    val    dynamicCounters = new HashMap[Int,(Block, SIR with Instr, String)]
 
     def addDynamicCounter(b:Block) {
 
@@ -151,39 +172,46 @@ object profile2 {
       // Assumes loadTarget will always be a register due to the Start
       //front-end parsing
       def insertCounterWithRegister(loadTarget:Register,
-      currentInstr:Instr): List[SSA] = {
+      currentInstr:SIR with Instr, fieldName:String): List[SIR with Instr] = {
         val load = Load(loadTarget, IntType)
         val shifted_counter = counter_counter << 16
         val add = Add(Register(currentInstr.num), Immediate(shifted_counter),
       IntType)
         val count = Count(Register(currentInstr.num))
 
-        dynamicCounters.put(counter_counter, (b, count))
+        dynamicCounters.put(counter_counter, (b, count, fieldName.split("_offset")(0)))
 
         counter_counter += 1
         val result = List(load, add, count)
         result
       }
 
-      def insertCounter(loadTarget:Operand, currentInstr:Instr): List[SSA] = {
-        loadTarget match {
-          case r:Register => insertCounterWithRegister(r, currentInstr)
+      def insertCounter(target:Operand, offset:Operand, currentInstr:SIR with Instr): List[SIR with Instr] = {
+        target match {
+          case r:Register => offset match {
+            case o:Offset => 
+              insertCounterWithRegister(r,currentInstr,
+        o.s);
+            case _ => List()
+          }
           case _ => List()
         }
       }
 
 
-      var start:List[SSA] = List()
-      var end = b.instrsSSA.last
+      var start:List[SIR with Instr] = List()
+      var end = b.instrs.last
 
-      var current = b.instrsSSA.head
-      var remaining = b.instrsSSA.tail
+      var current = b.instrs.head
+      var remaining = b.instrs.tail
       while (current != end){
         // if current is a dynamic load, insert the type counter
         //instructions in front of it
         current match {
-          case ld:Lddynamic => start = start ++ insertCounter(ld.a, ld)
-          case sd:Stdynamic => start = start ++ insertCounter(sd.a, sd)
+          case ld:Lddynamic => 
+            start = start ++ insertCounter(ld.a, ld.b, ld)
+          case sd:Stdynamic => 
+            start = start ++ insertCounter(sd.a, sd.b, sd)
           case _ =>
         }
 
@@ -194,7 +222,7 @@ object profile2 {
       }
 
       start = start :+ current
-      b.instrsSSA = start
+      b.instrs = new ListBuffer[SIR with Instr]() ++ start
 
     }
 
