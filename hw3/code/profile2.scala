@@ -2,46 +2,40 @@ import scala.collection.mutable._
 
 object profile2 {
   def optimizeDynamic(cfgs:List[CFG], counterMap:HashMap[Int, (Block,
-    SIR with Instr, String, Int)], resultsMap:HashMap[Int,Array[Int]], types:List[TypeDeclaration]){
+    SIR with Instr, String, Int)], resultsMap:HashMap[Int,Array[Int]],
+  types:List[TypeDeclaration]):(Int, Int) = {
 
-    def optimizeLddynamic(b:Block, cinstr:SIR with Instr, newOffset:Int){
+    var loadCount:Int = 0
+    var storeCount:Int = 0
+
+    def optimizeLddynamic(b:Block, cinstr:SIR with Instr,
+    newOffset:Int){
+
       // find the cinstr in the block
-      if (b.instrs.size > 8){
-        // spanning from getting the location in memory for the object
-        //base pointer, through the inserted counts, through the
-        //dynamic load and checks, and up to the add just before the
-        //load
-        val window = b.instrs.sliding(8)
+      if (b.instrs.size > 4){
+        val window = b.instrs.sliding(5)
         val countLoc = 3
 
         var windowIndex = 0
         var curWindow = window.next
 
         // iterate until the window is positioned properly
-        while (window.hasNext && curWindow(countLoc) != cinstr){
+        while (window.hasNext && !(curWindow(countLoc) eq cinstr)){
           windowIndex += 1
           curWindow = window.next
         }
 
-        // Do this all nested to be on the safe side in case any part
-        // of the IR layout isn't exactly as expected
         curWindow(0) match {
-          case cn1:Checknull => curWindow(1) match {
+          case cn:Checknull => curWindow(1) match{
             case l:Load => curWindow(2) match {
-              case a1:Add => curWindow(3) match {
-                case c:Count => curWindow(4) match{
-                  case ld:Lddynamic => curWindow(5) match{
-                    case cn2:Checknull => curWindow(6) match{
-                      case ct:Checktype => curWindow(7) match{
-                        case a2:Add => 
-                          a2.a = Register(cn1.num)
-                          a2.b match {
-                            case o:Offset => a2.b = Offset(o.s, Option(newOffset))
-                            case _ =>
-                          }
-                        case _ =>
-                      } 
-                      case _ =>
+              case a:Add => curWindow(3) match{
+                case c:Count => curWindow(4) match {
+                  case ld:Lddynamic => {
+                    a.a = Register(cn.num)
+                    a.b  = Offset(ld.b  match { case o:Offset =>
+                      o.s; case _ => "_offset"}, Option(newOffset))
+                    curWindow(4) = Load(Register(a.num), DynamicType)
+                    curWindow(4).num = ld.num
                     }
                     case _ =>
                   }
@@ -49,26 +43,25 @@ object profile2 {
                 }
                 case _ =>
               }
-            case _ =>
+              case _ =>
             }
             case _ =>
-          }
-          case _ =>
         }
 
-
-        val leftHalf =b.instrs.toList.take(windowIndex + 1) :+
-        curWindow.last 
-        val temp = new ListBuffer[SIR with SIR with Instr]()
-        b.instrs = temp ++ (leftHalf ++
+        val leftHalf = b.instrs.toList.take(windowIndex) :+
+        curWindow(0) :+ curWindow(2) :+ curWindow(4)
+        b.instrs = new ListBuffer[SIR with Instr]() ++ (leftHalf ++
           b.instrs.takeRight(b.instrs.size - (curWindow.size +
-        windowIndex)))
+            windowIndex)))
 
+        loadCount += 1
       }
-    }
 
+}
 
-    def optimizeStdynamic(b:Block, cinstr:SIR with Instr, newOffset:Int){
+    def optimizeStdynamic(b:Block, cinstr:SIR with Instr,
+    newOffset:Int){
+
       // find the cinstr in the block
       if (b.instrs.size > 8){
         val window = b.instrs.sliding(7)
@@ -78,7 +71,7 @@ object profile2 {
         var curWindow = window.next
 
         // iterate until the window is positioned properly
-        while (window.hasNext && curWindow(countLoc) != cinstr){
+        while (window.hasNext && !(curWindow(countLoc) eq cinstr)){
           windowIndex += 1
           curWindow = window.next
         }
@@ -94,16 +87,18 @@ object profile2 {
                   case s:Store => curWindow(1) match {
                     case a1:Add => curWindow(0) match {
                       case n:New => {
-                        a1.a = sd.b
-                        a1.b = Offset(sd.c.get match { case o:Offset =>
+                        a2.a = sd.b
+                        a2.b = Offset(sd.c.get match { case o:Offset =>
                           o.s; case _ => "_offset"}, Option(newOffset))
 
-
-                        val leftHalf = b.instrs.toList.take(windowIndex) :+
-                        curWindow(1) :+ curWindow(2)
+                        curWindow(6) = Store(sd.a, Register(a2.num))
+                        curWindow(6).num = sd.num
+                        val leftHalf = b.instrs.toList.take(windowIndex) :+ curWindow(0) :+ curWindow(1) :+ curWindow(2) :+ curWindow(4) :+ curWindow(6)
                         b.instrs = new ListBuffer[SIR with Instr]() ++ (leftHalf ++
                           b.instrs.takeRight(b.instrs.size - (curWindow.size +
                             windowIndex)))
+
+                        storeCount += 1
                       }
                       case _ =>
                     }
@@ -116,12 +111,14 @@ object profile2 {
                         Option(newOffset))
 
                     curWindow(6) = Store(sd.a, Register(a2.num))
+                    curWindow(6).num = sd.num
 
-                    val leftHalf =b.instrs.toList.take(windowIndex
-                      + 3) :+ curWindow(4) :+ curWindow(6)
+                    val leftHalf =b.instrs.toList.take(windowIndex) :+ curWindow(0) :+ curWindow(1) :+ curWindow(2) :+ curWindow(4) :+ curWindow(6)
                     b.instrs = new ListBuffer[SIR with Instr]() ++ (leftHalf ++
                       b.instrs.takeRight(b.instrs.size - (curWindow.size +
                         windowIndex)))
+
+                    storeCount += 1
                     }
                   case _ =>
                 }
@@ -133,20 +130,31 @@ object profile2 {
                 }
           case _ =>
         }
-
-    
-
-
-/*        val leftHalf =b.instrs.toList.take(windowIndex + 1) :+
-        curWindow(1) :+ curWindow(2) :+ curWindow(3)
-        val temp = new ListBuffer[SIR with SIR with Instr]()
-        b.instrs = new ListBuffer[SIR with SIR with Instr]() ++ (leftHalf ++
-          b.instrs.takeRight(b.instrs.size - (curWindow.size +
-        windowIndex)))*/
-
       }
+    
     }
 
+    def removeCounts(b:Block, cinstr:SIR with Instr){
+      // find the cinstr in the block
+      if (b.instrs.size > 3){
+        val window = b.instrs.sliding(3)
+        val countLoc = 2
+
+        var windowIndex = 0
+        var curWindow = window.next
+
+        // iterate until the window is positioned properly
+        while (window.hasNext && !(curWindow(countLoc) eq cinstr)){
+          windowIndex += 1
+          curWindow = window.next
+        }
+
+        val leftHalf = b.instrs.toList.take(windowIndex)
+        b.instrs = new ListBuffer[SIR with Instr]() ++ (leftHalf ++
+      b.instrs.takeRight(b.instrs.size - (curWindow.size + windowIndex)))
+      }
+
+    }
 
     def offsetLookup(index:Int, name:String):Int = {
       var offset = 0
@@ -159,7 +167,7 @@ object profile2 {
       offset
     }
 
-    val singleTypeResults = resultsMap.filter(w => w._2.sum == w._2.max
+    val (singleTypeResults, multiTypeResults) = resultsMap.partition(w => w._2.sum == w._2.max
       && w._2.sum > 0)
     val stores = singleTypeResults.filter(w => counterMap(w._1)._4 ==
       1)
@@ -175,7 +183,12 @@ object profile2 {
     stores.foreach(w =>
       optimizeStdynamic(counterMap(w._1)._1, counterMap(w._1)._2,
       offsetLookup(w._2.indexWhere(_ > 0), counterMap(w._1)._3)))
-    
+
+    multiTypeResults.foreach(w => removeCounts(counterMap(w._1)._1,
+    counterMap(w._1)._2))
+
+
+    (loadCount, storeCount)
     }
 
 
@@ -198,7 +211,9 @@ object profile2 {
 
         if (groupNumber != counterNumber) {
           // put the old array into the map
-          type_counts.put(groupNumber,typeCounts)
+          if (groupNumber != -1){
+            type_counts.put(groupNumber,typeCounts)
+          }
 
           // start on a new group of counts with a new array
           groupNumber = counterNumber
@@ -212,7 +227,9 @@ object profile2 {
         c = true
       }
     }
-    type_counts.put(groupNumber,typeCounts)
+    if (groupNumber != -1){
+      type_counts.put(groupNumber,typeCounts)
+    }
     type_counts
   }
 
