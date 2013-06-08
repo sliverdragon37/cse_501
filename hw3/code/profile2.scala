@@ -9,7 +9,7 @@ object profile2 {
     var storeCount:Int = 0
 
     def optimizeLddynamic(b:Block, cinstr:SIR with Instr,
-    newOffset:Int){
+    newOffset:(String,Int,IRType)){
 
       // find the cinstr in the block
       if (b.instrs.size > 4){
@@ -31,11 +31,65 @@ object profile2 {
               case a:Add => curWindow(3) match{
                 case c:Count => curWindow(4) match {
                   case ld:Lddynamic => {
+
                     a.a = Register(cn.num)
-                    a.b  = Offset(ld.b  match { case o:Offset =>
-                      o.s; case _ => "_offset"}, Option(newOffset))
+                    a.b  = Offset(newOffset._1 + "_offset", Option(newOffset._2))
                     curWindow(4) = Load(Register(a.num), DynamicType)
                     curWindow(4).num = ld.num
+
+                    newOffset._3 match {
+                      case i:PrimitiveType => {
+
+                        val remainingInstrs =
+                          b.instrs.takeRight(b.instrs.size -  (windowIndex
+                            + curWindow.size))
+
+                        if (remainingInstrs.size >= 4){
+
+
+                          val newWindow = remainingInstrs.take(4)
+
+                          val num = newWindow(3).num
+                          newWindow(3) = Load(Register(a.num), newOffset._3)
+                          newWindow(3).num = num
+
+
+                        val leftHalf = b.instrs.toList.take(windowIndex) :+
+                        curWindow(0) :+ curWindow(2)
+                        b.instrs = new ListBuffer[SIR with Instr]() ++
+                        ((leftHalf :+ newWindow(3)) ++
+                          b.instrs.takeRight(b.instrs.size - (curWindow.size +
+                            windowIndex + newWindow.size)))
+
+                        loadCount += 1
+                        }
+                        else{
+                          val leftHalf = b.instrs.toList.take(windowIndex) :+
+                          curWindow(0) :+ curWindow(2) :+ curWindow(4)
+                          b.instrs = new ListBuffer[SIR with Instr]() ++ (leftHalf ++
+                            b.instrs.takeRight(b.instrs.size - (curWindow.size +
+                              windowIndex)))
+
+                          loadCount += 1
+                        }
+
+                      }
+                      case _ =>{
+
+                    
+
+                        val leftHalf = b.instrs.toList.take(windowIndex) :+
+                        curWindow(0) :+ curWindow(2) :+ curWindow(4)
+                        b.instrs = new ListBuffer[SIR with Instr]() ++ (leftHalf ++
+                          b.instrs.takeRight(b.instrs.size - (curWindow.size +
+                            windowIndex)))
+
+                        loadCount += 1
+
+                      }
+                    }
+
+
                     }
                     case _ =>
                   }
@@ -47,20 +101,12 @@ object profile2 {
             }
             case _ =>
         }
-
-        val leftHalf = b.instrs.toList.take(windowIndex) :+
-        curWindow(0) :+ curWindow(2) :+ curWindow(4)
-        b.instrs = new ListBuffer[SIR with Instr]() ++ (leftHalf ++
-          b.instrs.takeRight(b.instrs.size - (curWindow.size +
-            windowIndex)))
-
-        loadCount += 1
       }
 
 }
 
     def optimizeStdynamic(b:Block, cinstr:SIR with Instr,
-    newOffset:Int){
+    newOffset:(String,Int,IRType)){
 
       // find the cinstr in the block
       if (b.instrs.size > 8){
@@ -87,28 +133,30 @@ object profile2 {
                   case s:Store => curWindow(1) match {
                     case a1:Add => curWindow(0) match {
                       case n:New => {
-                        a2.a = sd.b
-                        a2.b = Offset(sd.c.get match { case o:Offset =>
-                          o.s; case _ => "_offset"}, Option(newOffset))
+                        
 
-                        curWindow(6) = Store(sd.a, Register(a2.num))
-                        curWindow(6).num = sd.num
-                        val leftHalf = b.instrs.toList.take(windowIndex) :+ curWindow(0) :+ curWindow(1) :+ curWindow(2) :+ curWindow(4) :+ curWindow(6)
-                        b.instrs = new ListBuffer[SIR with Instr]() ++ (leftHalf ++
-                          b.instrs.takeRight(b.instrs.size - (curWindow.size +
-                            windowIndex)))
 
-                        storeCount += 1
+                            a2.a = sd.b
+                            a2.b = Offset(newOffset._1 + "_offset", Option(newOffset._2))
+
+                            curWindow(6) = Store(sd.a, Register(a2.num))
+                            curWindow(6).num = sd.num
+                            val leftHalf = b.instrs.toList.take(windowIndex) :+ curWindow(0) :+ curWindow(1) :+ curWindow(2) :+ curWindow(4) :+ curWindow(6)
+                            b.instrs = new ListBuffer[SIR with Instr]() ++ (leftHalf ++
+                              b.instrs.takeRight(b.instrs.size - (curWindow.size +
+                                windowIndex)))
+
+                            storeCount += 1
                       }
                       case _ =>
                     }
                     case _ =>
                   }
                   case cn:Checknull => {
+
                     a2.a = Register(cn.num)
-                    a2.b = Offset(sd.c.get match { case o:Offset =>
-                          o.s; case _ => "_offset"},
-                        Option(newOffset))
+                    a2.b = Offset(newOffset._1,
+                        Option(newOffset._2))
 
                     curWindow(6) = Store(sd.a, Register(a2.num))
                     curWindow(6).num = sd.num
@@ -117,7 +165,6 @@ object profile2 {
                     b.instrs = new ListBuffer[SIR with Instr]() ++ (leftHalf ++
                       b.instrs.takeRight(b.instrs.size - (curWindow.size +
                         windowIndex)))
-
                     storeCount += 1
                     }
                   case _ =>
@@ -156,13 +203,10 @@ object profile2 {
 
     }
 
-    def offsetLookup(index:Int, name:String):Int = {
-      var offset = 0
-      if (index >= 5){
-        offset = (types(index - 5).args.find(x => x._1.equals(name))) match{
-          case Some(tuple) => tuple._2
-          case None => 0
-        }
+    def offsetLookup(index:Int, name:String):(String, Int, IRType) = {
+      val offset = (types(index - 5).args.find(x => x._1.equals(name))) match{
+        case Some(tuple) => tuple
+        case None => null
       }
       offset
     }
@@ -184,12 +228,68 @@ object profile2 {
       optimizeStdynamic(counterMap(w._1)._1, counterMap(w._1)._2,
       offsetLookup(w._2.indexWhere(_ > 0), counterMap(w._1)._3)))
 
+    // remove any counts not associated with an optimization
     multiTypeResults.foreach(w => removeCounts(counterMap(w._1)._1,
-    counterMap(w._1)._2))
+      counterMap(w._1)._2))
 
+    def deleteCount(b:Block){
+      if (b.instrs.size > 3){
+        var newInstrs = new ListBuffer[SIR with Instr]()
+
+        val iter = b.instrs.iterator
+        while (iter.hasNext){
+          val cur = iter.next
+          cur match {
+            case _:Count => {
+              newInstrs.trimEnd(2)
+            }
+            case _ => newInstrs.append(cur)
+          }
+        }
+        b.instrs = newInstrs
+      }
+    }
+
+    cfgs.foreach(_.list.foreach(b => deleteCount(b)))
 
     (loadCount, storeCount)
     }
+
+  def parseOutput(output:Stream[String]):List[String] = {
+    def parseStat(line:String):String = {
+      line.split(":")(0)
+    }
+
+    object Mode extends Enumeration {
+      type Mode = Value
+      val Writes, Stats, Counts = Value
+    }
+
+    import Mode._
+    var curMode = Writes
+    var parsed = List[String]()
+
+
+    try {
+    for (line <- output){
+      if (line.startsWith("- Counts")){
+        curMode = Counts
+      }
+      curMode match {
+        case Writes => parsed = parsed :+ line
+        case Stats => 
+        case Counts =>
+      }
+      if (line == "-------------------------"){
+        curMode = Stats
+      }
+    }
+    }
+    catch {
+      case _ : Throwable => return parsed
+    }
+    parsed
+  }
 
 
   def getDynamicCounts(prof:Stream[String], numberOfTypes:Int):HashMap[Int,Array[Int]] = {
