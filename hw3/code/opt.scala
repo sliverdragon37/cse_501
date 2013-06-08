@@ -149,13 +149,14 @@ object main {
       //remove count instructions, insert fallback branches
       profile.cleanUpCounters(CFGs)
 
+      CFGs.foreach(_.wpeephole)
+
       //renumber
       var i = 1
       var m:HashMap[Int,Int] = new HashMap[Int,Int]()
       for (c <- CFGs) {
         i = c.wrenumber(i,m)
       }
-
       CFGs.foreach(_.reRegister(m))
 
       //CFGs.foreach(_.dumpGraphViz(outfname + "_postprof"))

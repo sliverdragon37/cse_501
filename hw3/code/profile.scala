@@ -22,14 +22,20 @@ object profile {
 
   def cleanUpCounters(cfgs:List[CFG]) = {
     def cleanUp(b:Block) = {
-      //TODO: remove adds before conditional counts as well
-      def noCounter(s:SIR with Instr) = {
-        s match {
-          case Count(_) => List()
-          case x => List(x)
+      var l:ListBuffer[SIR with Instr] = new ListBuffer()
+      var dropNext = false
+      for (i <- b.instrs.reverse) {
+        if (!dropNext) {
+          i match {
+            case Count(Immediate(_)) =>
+            case Count(Register(_)) => dropNext = true
+            case x => l.append(x)
+          } 
+        } else {
+            dropNext = false
         }
       }
-      b.instrs = b.instrs.flatMap(noCounter)
+      b.instrs = l.reverse
     }
     cfgs.foreach(_.list.foreach(cleanUp))
     def insertFallbacks(c:CFG) = {
