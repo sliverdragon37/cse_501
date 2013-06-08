@@ -1,0 +1,38 @@
+\documentclass[12pt,letterpaper]{article}
+\usepackage{graphicx}
+
+\usepackage[margin=1in]{geometry}
+
+\begin{document}
+
+\begin{flushright}
+Homework 3: Profile Guided Optimization\\
+Paul Vines and Eric Mullen\\
+CSE 501\\
+\end{flushright}
+
+\subsection*{Optimizations}
+\subsubsection*{Dynamic Type Refinement}
+WRITE ME PAUL WRITE ME WRITE ME WRITE ME DON'T FORGET TO WRITE ME BEFORE YOU TURN ME IN
+\subsubsection*{Code Layout}
+Here, we aim to improve the layout of basic blocks in memory by
+counting how many times branches are taken in the code. First, we
+instrument all unconditional branches with a counter, and instrument
+each conditional branch with two counters. We do this while the code
+is in SSA form, which is also the point in our code where all
+transitions between basic blocks are explicit, i.e. there are no
+points where we simply fall off the end of a basic block into the next
+basic block. These counters are then used as the priorities of the
+basic blocks when they are layed out in each function. Previously,
+blocks were layed out in an arbitrary topological sort, now they are
+layed out in a priority topological sort. The only difference is,
+instead of a worklist, a priority queue is used to keep the blocks
+currently being processed, and thus higher priority blocks (those on
+the hot code path) are all layed out close to each other.
+
+This has surprisingly little effect on runtime, in most cases leaving
+the optimized program with the exact same dynamic cycle count as its
+non-optimized version.
+
+
+\end{document}
