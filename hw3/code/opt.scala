@@ -18,6 +18,7 @@ object main {
 
     var branch_counters:HashMap[(Block,Block),Int] = null
     var branch_counts:HashMap[Int,Int] = null
+    var dynamic_counters:HashMap[Int, (Block, SIR with Instr, String, Int)] = null
 
     var ssa = false
     var cse = false
@@ -91,9 +92,7 @@ object main {
       if (cbr){
         branch_counters = profile.instrBranches(CFGs)
       }
-      if (dtr){
-        profile2.countDynamic(CFGs)
-      }
+
 
       //convert back out of SSA
       CFGs.foreach(_.fromSSA)
@@ -112,9 +111,7 @@ object main {
     }
 
     CFGs.foreach(_.reRegister(m))
-    if (dtr){
-      profile2.fixRegisters(CFGs)
-    }
+
 
     //CFGs.foreach(_.dumpGraphViz(outfname + "_postopt"))
 
@@ -171,8 +168,61 @@ object main {
 
     if (dtr){
 
-      val prof = (Seq("dart", "../../../start/bin/start.dart", "-r", "--stats", outfname)).lines
+      // ADD COUNTERS
+      dynamic_counters = profile2.countDynamic(CFGs)
+      //renumber instructions
+      //(part of translation out of SSA)
+      var i = 1
+      var m:HashMap[Int,Int] = new HashMap[Int,Int]()
+      for (c <- CFGs) {
+        i = c.renumber(i,m)
+      }
+      CFGs.foreach(_.reRegister(m))
 
+      profile2.fixRegisters(CFGs)
+
+      val instrsOptDtrCount = (allHeaders.map(_.toString).map(_ + "\n")) ++ (CFGs.flatMap(_.list.flatMap(_.instrs)).map(_.toString).map(_+"\n"))
+
+      util.writeToFile(instrsOptDtrCount,outfname)
+
+
+      // RUN COUNTER CODE
+      val dtrProf = (Seq("dart", "../start/bin/start.dart", "-r", "--stats", outfname)).lines
+
+      val dynamic_profile = profile2.getDynamicCounts(dtrProf, tHeaders.size + 5)
+
+      val correctOutput = profile2.parseOutput(dtrProf)
+
+      // OPTIMIZE
+      val dynamicCount = profile2.optimizeDynamic(CFGs, dynamic_counters, dynamic_profile, tHeaders)
+      i = 1
+      m = new HashMap[Int,Int]()
+      for (c <- CFGs) {
+        i = c.renumber(i,m)
+      }
+      CFGs.foreach(_.reRegister(m))
+
+
+      val instrsOptRisky = (allHeaders.map(_.toString).map(_ + "\n")) ++ (CFGs.flatMap(_.list.flatMap(_.instrs)).map(_.toString).map(_+"\n"))
+
+      util.writeToFile(instrsOptRisky,outfname)
+
+      // RUN OPTIMIZED CODE
+      val optProf = (Seq("dart", "../start/bin/start.dart", "-r", "--stats", outfname)).lines
+
+      val optimizedOutput = profile2.parseOutput(optProf)
+
+
+      // ROLL BACK
+      if ((dynamicCount._1 > 0 || dynamicCount._2 > 0) && correctOutput != optimizedOutput){
+        util.writeToFile(instrsOpt,outfname)
+
+      }
+      // OR DISPLAY OPTIMIZATIONS
+      else{
+        System.out.println("Lddynamics Replaced: " + dynamicCount._1)
+        System.out.println("Stdynamics Replaced: " + dynamicCount._2)
+      }
     }
 
     if (mem) {
