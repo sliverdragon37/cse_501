@@ -5,7 +5,7 @@ class Block(pStart:Int, pEnd:Int, pName:String, pBlocks:ListBuffer[Block]){
   //used for initialization
   var start:Int = pStart
   var end:Int = pEnd
-  def name = pName + "_" + instrs.head.num
+  lazy val name = pName + "_" + instrs.head.num
   var blocks:ListBuffer[Block] = pBlocks
   pBlocks.append(this)
   var preds:ListBuffer[Block] = new ListBuffer[Block]()
@@ -31,7 +31,18 @@ class Block(pStart:Int, pEnd:Int, pName:String, pBlocks:ListBuffer[Block]){
   //block
   var phi:List[Phi] = List()
 
+  //basic implementation of an intrusive binary heap
+  var heapKey:Int = -1
+  var heapInserted:Boolean = false
+  var heapRemoved:Boolean = false
+
   private var renamed = false
+
+  var biasedSuccs:List[(Int,Block)] = List()
+
+  def setBias(b:Block,c:Int) {
+    biasedSuccs ::= ((c,b))
+  }
 
   //get rid of branches to next statement
   def peepholeBranch = {
@@ -52,15 +63,32 @@ class Block(pStart:Int, pEnd:Int, pName:String, pBlocks:ListBuffer[Block]){
   }
 
   def toGraphViz:String = {
-    val s = name + ";\n"
-    //val pre = succs.map(name + " -> " + _.name + ";\n").foldLeft("")(_+_)
-    val out = instrs.last match {
-      case Br(Dest(b)) => name + " -> " + b.name + ";\n"
-      case Blbc(_,Dest(b),Some(Dest(c))) => name + " -> " + b.name + ";\n" + name + " -> " + c.name + ";\n"
-      case Blbs(_,Dest(b),Some(Dest(c))) => name + " -> " + b.name + ";\n" + name + " -> " + c.name + ";\n"
-      case _ => ""
+    if (instrs.length > 0) {
+      val s = name + ";\n"
+      val toMatch = instrs.last match {
+        case a:Br => instrs.dropRight(1).last match {
+          case x:Blbs => x
+          case x:Blbc => x
+          case _ => a
+        }
+        case a => a
+      }
+      val out = toMatch match {
+        case Br(Dest(b)) => name + " -> " + b.name + ";\n"
+        case Blbc(_,Dest(b),Some(Dest(c))) => {
+          println("found blbc")
+          name + " -> " + b.name + ";\n" + name + " -> " + c.name + ";\n"
+        }
+        case Blbs(_,Dest(b),Some(Dest(c))) => {
+          println("found blbs")
+          name + " -> " + b.name + ";\n" + name + " -> " + c.name + ";\n"
+        }
+        case _ => ""
+      }
+      s + out
+    } else {
+      ""
     }
-    s + out
   }
 
   def allocate(i:Int) = {
@@ -126,7 +154,9 @@ class Block(pStart:Int, pEnd:Int, pName:String, pBlocks:ListBuffer[Block]){
         case _ => o
       }
     }
-    instrs.foreach(_.opMap(r))
+    instrs.foreach(i => {
+      i.opMap(r)
+    })
   }
 
   def fromSSA:List[(Block,SIR with Instr)] = {
@@ -432,6 +462,7 @@ class CFG(header:MethodDeclaration, pEnd:Int, instrMap:HashMap[Int,SIR with Inst
   var end:Int = pEnd-1
   instrMap.values.foreach(instr => handleInstr(instr, instrMap))
   lazy val list:ListBuffer[Block] = getTopoList
+  lazy val wlist:List[Block] = getWeightedTopoList
 
   //mapping of local variables to all the blocks where they're defined
   var symTable:Map[Local,HashSet[Block]] = null
@@ -602,6 +633,7 @@ class CFG(header:MethodDeclaration, pEnd:Int, instrMap:HashMap[Int,SIR with Inst
     list.foreach(_.finishConstruction(instrMap,blockMap))
   }
 
+  //THIS IS BROKEN (doesn't add both branches for conditional branches)
   def handleInstr(instr:SIR with Instr, instrMap:HashMap[Int,SIR with Instr]){
     instr match {
       case br: Br => addBranch(br.num, resolveOperand(br.a), false, instrMap)
@@ -639,10 +671,30 @@ class CFG(header:MethodDeclaration, pEnd:Int, instrMap:HashMap[Int,SIR with Inst
     //eliminate unneeded branches
     list.foreach(_.peepholeBranch)
   }
+  
+  def wpeephole = {
+    //store next on each block
+    var prev = wlist.head
+    wlist.tail.foreach(t => {
+      prev.nextBlock = t
+      prev = t
+    })
+
+    //eliminate unneeded branches
+    wlist.foreach(_.peepholeBranch)
+  }
 
   def renumber(i:Int,m:HashMap[Int,Int]):Int = {
     var x = i
     for (b <- list) {
+      x = b.renumber(x,m)
+    }
+    x
+  }
+
+  def wrenumber(i:Int,m:HashMap[Int,Int]):Int = {
+    var x = i
+    for (b <- wlist) {
       x = b.renumber(x,m)
     }
     x
@@ -655,11 +707,10 @@ class CFG(header:MethodDeclaration, pEnd:Int, instrMap:HashMap[Int,SIR with Inst
   def getTopoList() = {
     var workList:Queue[Block] = new Queue[Block]()
     var finalList:ListBuffer[Block] = new ListBuffer[Block]()
-    var block:Block = null
-
+    
     workList.enqueue(root)
     while (!workList.isEmpty){
-      block = workList.dequeue
+      val block = workList.dequeue
       finalList.append(block)
 
       block.succs.foreach{b => if(!finalList.contains(b) && !workList.contains(b)){workList.enqueue(b)}}
@@ -668,8 +719,34 @@ class CFG(header:MethodDeclaration, pEnd:Int, instrMap:HashMap[Int,SIR with Inst
     finalList
   }
 
+  def getWeightedTopoList:List[Block] = {
+    heap.makeHeap()
+    heap.insert(root,0)
+    var finalList:List[Block] = List()
+
+    //loop number of basic blocks times
+    while (!heap.isEmpty) {
+      val b = heap.extractMax()
+      finalList ++= List(b)
+      
+      for (k <- b.biasedSuccs) {
+        val (key,block) = k
+        if (!block.heapInserted) {
+          heap.insert(block,key)
+        }
+      }
+
+    }
+    finalList
+  }
+
   def printInstrs = {
     list.foreach(_.printInstrs)
+  }
+
+  def wprintInstrs = {
+    println(wlist)
+    wlist.foreach(_.printInstrs)
   }
 
   override def toString:String = {

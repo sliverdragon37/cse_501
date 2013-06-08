@@ -16,7 +16,7 @@ object main {
 
     val I = inlines.dropRight(1)
 
-    var branch_counters:HashMap[Int,(Block,Block)] = null
+    var branch_counters:HashMap[(Block,Block),Int] = null
     var branch_counts:HashMap[Int,Int] = null
 
     var ssa = false
@@ -71,17 +71,11 @@ object main {
     //List[Instr] notation
     CFGs.foreach(_.finishConstruction)
 
-    // println("Original code:")
-    // CFGs.foreach(_.printInstrs)
-
     //CFGs.foreach(_.dumpGraphViz(outfname + "_preopt"))
 
     if (ssa){
       //convert each CFG to SSA
       CFGs.foreach(_.toSSA)
-
-      // println("SSA before optimization:")
-      // CFGs.foreach(_.printSSA)
 
       //Run all optimizations that require SSA
       if (scp){
@@ -93,9 +87,6 @@ object main {
       if (cbr){
         branch_counters = profile.instrBranches(CFGs)
       }
-
-      // println("SSA after optimization:")
-      // CFGs.foreach(_.printSSA)
 
       //convert back out of SSA
       CFGs.foreach(_.fromSSA)
@@ -112,10 +103,8 @@ object main {
     for (c <- CFGs) {
       i = c.renumber(i,m)
     }
-    CFGs.foreach(_.reRegister(m))
 
-    // println("Emitted code:")
-    // CFGs.foreach(_.printInstrs)
+    CFGs.foreach(_.reRegister(m))
 
     //CFGs.foreach(_.dumpGraphViz(outfname + "_postopt"))
 
@@ -134,11 +123,35 @@ object main {
       //get the output of running the program once
       val prof = (Seq("dart", "../../../start/bin/start.dart", "-r", "--stats", outfname)).lines
 
+      //get branch counts from the output
       branch_counts = profile.getBranchCounts(prof)
 
-      //now we have branch profile information
-      //do something interesting with it
-      //TODO ^^
+      //tell each block what its branch counts were
+      for (x <- branch_counters.keys) {
+        val ctr = branch_counters(x)
+        val count = branch_counts(ctr)
+        x._1.setBias(x._2,count)
+      }
+
+      //remove count instructions, insert fallback branches
+      profile.cleanUpCounters(CFGs)
+
+      //renumber
+      var i = 1
+      var m:HashMap[Int,Int] = new HashMap[Int,Int]()
+      for (c <- CFGs) {
+        i = c.wrenumber(i,m)
+      }
+
+      CFGs.foreach(_.reRegister(m))
+
+      //CFGs.foreach(_.dumpGraphViz(outfname + "_postprof"))
+
+      //put program together to write out
+      val profInstrsOpt = (allHeaders.map(_.toString).map(_ + "\n")) ++ (CFGs.flatMap(_.wlist.flatMap(_.instrs)).map(_.toString).map(_+"\n"))
+
+      //write out our better optimized version
+      util.writeToFile(profInstrsOpt,outfname)
 
     }
 
