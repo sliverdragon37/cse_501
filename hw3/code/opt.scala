@@ -23,6 +23,7 @@ object main {
     var cse = false
     var scp = false
     var cbr = false
+    var dtr = false
     var mem = false
     var cnt:Int = 1
     while (cnt < args.length){
@@ -39,6 +40,9 @@ object main {
       }
       if (args(cnt).takeRight(3) == "cbr"){
         cbr = true
+      }
+      if (args(cnt).takeRight(3) == "dtr"){
+      dtr = true
       }
       if (args(cnt).takeRight(3) == "mem"){
         mem = true
@@ -87,6 +91,9 @@ object main {
       if (cbr){
         branch_counters = profile.instrBranches(CFGs)
       }
+      if (dtr){
+        profile2.countDynamic(CFGs)
+      }
 
       //convert back out of SSA
       CFGs.foreach(_.fromSSA)
@@ -105,6 +112,9 @@ object main {
     }
 
     CFGs.foreach(_.reRegister(m))
+    if (dtr){
+      profile2.fixRegisters(CFGs)
+    }
 
     //CFGs.foreach(_.dumpGraphViz(outfname + "_postopt"))
 
@@ -113,10 +123,13 @@ object main {
     val mHeaders = CFGs.map(_.getHeader)
     val allHeaders = tHeaders ++ mHeaders ++ gHeaders
 
+
     val instrsOpt = (allHeaders.map(_.toString).map(_ + "\n")) ++ (CFGs.flatMap(_.list.flatMap(_.instrs)).map(_.toString).map(_+"\n"))
 
-    //write the optimized code back out to file
     util.writeToFile(instrsOpt,outfname)
+
+    //write the optimized code back out to file
+
 
     if (cbr) {
 
@@ -152,6 +165,12 @@ object main {
 
       //write out our better optimized version
       util.writeToFile(profInstrsOpt,outfname)
+
+    }
+
+    if (dtr){
+
+      val prof = (Seq("dart", "../../../start/bin/start.dart", "-r", "--stats", outfname)).lines
 
     }
 
