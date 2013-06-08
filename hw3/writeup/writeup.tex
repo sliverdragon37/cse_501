@@ -13,7 +13,37 @@ CSE 501\\
 
 \subsection*{Optimizations}
 \subsubsection*{Dynamic Type Refinement}
-WRITE ME PAUL WRITE ME WRITE ME WRITE ME DON'T FORGET TO WRITE ME BEFORE YOU TURN ME IN
+\subsubsection*{Dynamic Type Refinement}
+The purpose of the Dynamic Type Refinement (DTR) optimization is to
+attempt to eliminate dynamic loads and stores via profile-based
+optimization. Dynamic loads and stores can make up a significant
+amount (up to 50\% in the example programs) of the run-time of a
+program, so reducing them is a potentially high-value target for
+optimization.
+The profiling is conducted by inserting a counter before
+each dynamic load and store instruction to track which type the
+object is that is used in the dynamic instruction. These counts are
+gathered and any count showing that only a single type is ever used at
+a certain position is marked for optimization. Since the type of the
+object being operated on is known, the exact offset (and type of the
+value loaded, if it is a dynamic load) can be determined. 
+To optimize a dynamic load, the lddynamic instruction is converted
+into a load preceded by an add to create the proper address from the
+object address and offset. Additionally, if the type of the expected
+return value is a primitive then the subsequent unboxing instructions
+are deleted since the load instruction will automatically unbox the
+primitive.
+To optimize a dynamic store is simpler; this only requires replacing
+the stdynamic instruction with an add and store to the proper address
+offset.
+The results of this optimization are impressive for the programs it
+works on: class, untyped\_class, and untyped\_struct all show
+significant improvements, with untyped\_class and untyped\_struct
+runtimes being more than cut in half. 
+\begin{center}
+\Includegraphics[width=3in]{dtrstats.png}
+\end{center}
+
 \subsubsection*{Code Layout}
 
 This optimization is enabled with the option ``cbr''. It will not work

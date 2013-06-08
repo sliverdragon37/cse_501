@@ -1,6 +1,6 @@
 import scala.io.Source
 import java.io.FileOutputStream
-import java.io.PrintStream
+import java.io.xoPrintStream
 import scala.collection.mutable._
 import scala.sys.process._
 
@@ -131,7 +131,7 @@ object main {
     if (cbr) {
 
       //get the output of running the program once
-      val prof = (Seq("dart", "../../../start/bin/start.dart", "-r", "--stats", outfname)).lines
+      val prof = (Seq("dart", "../start/bin/start.dart", "-r", "--stats", outfname)).lines
 
       //get branch counts from the output
       branch_counts = profile.getBranchCounts(prof)
@@ -228,7 +228,7 @@ object main {
     if (mem) {
 
       //run program, get output
-      val output = (Seq("dart", "../../../start/bin/start.dart", "-r", outfname)).lines
+      val output = (Seq("dart", "../start/bin/start.dart", "-r", outfname)).lines
 
       val optProg = memoize.makeEquivProg(output)
 
