@@ -15,6 +15,10 @@ CSE 501\\
 \subsubsection*{Dynamic Type Refinement}
 WRITE ME PAUL WRITE ME WRITE ME WRITE ME DON'T FORGET TO WRITE ME BEFORE YOU TURN ME IN
 \subsubsection*{Code Layout}
+
+This optimization is enabled with the option ``cbr''. It will not work
+if ``ssa'' is not also specified.
+
 Here, we aim to improve the layout of basic blocks in memory by
 counting how many times branches are taken in the code. First, we
 instrument all unconditional branches with a counter, and instrument
@@ -32,7 +36,47 @@ the hot code path) are all layed out close to each other.
 
 This has surprisingly little effect on runtime, in most cases leaving
 the optimized program with the exact same dynamic cycle count as its
-non-optimized version.
+non-optimized version. In the cases where the runtime is not the same,
+the optimized code ends up running slightly slower. We are not
+entirely sure what causes this. These results confirmed our hypothesis
+that code layout was not an especially large factor in program
+runtime, and that the original order a program is written in is in
+fact not that bad as a basic block layout.
+
+
+\subsubsection*{Output Memoization}
+
+This optimization is enabled by the ``mem'' option.
+
+This optimization runs the program, and grabs all output the program
+produces. It then constructs a program that is a series of
+instructions that writes the same output, and produces that as its
+optimized program.
+
+This optimization is provably optimal, if we consider program
+equivalence as only an I/O equivalence, i.e. two programs are
+equivalent if and only if they produce the same output. We noticed the
+key point that Start has no capacity for input (other than constants
+hard coded into the program text), and has only the capacity to write
+integers and newline characters to the screen. Thus, if we have some
+input program that produces some output when run, there is an infinite
+set of programs that produce the same output when run. However, one of
+these programs is optimal, in that it does no other computational work
+other than that required to produce the output. As there is only one
+way for a Start program to produce a specific output, the program that
+produces this output and computes nothing is thus optimal, in that it
+will run in a shorter amount of time than any other equivalent program
+in this set.
+
+This does not work if the program does not halt. However, for us to
+apply a profile guided optimization, we are already making the
+assumption that the program halts, and none of our profile guided
+optimizations work if this assumption breaks.
+
+In practice this optimization garners a massive speedup on any program
+that isn't a series of print statements. This is still of limited use
+in any useful setting, as most languages that exist in the wild have
+the capacity for input to their programs.
 
 
 \end{document}
