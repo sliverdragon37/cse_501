@@ -11,8 +11,17 @@ Paul Vines and Eric Mullen\\
 CSE 501\\
 \end{flushright}
 
+\subsection*{How To Run:}
+\emph{Compile: (Scala Compiler Version 2.10.1)}\\
+In code directory: scalac *.scala\\
+
+\emph{Run:}\\
+In test or untyped directory: run.sh [-opt=OPTIONS] filename\\
+OPTIONS: ssa, cse, scp, cbr, dtr, mem\\
+cse, cbr, and scp will not run without also specifying ssa\\
+
+
 \subsection*{Optimizations}
-\subsubsection*{Dynamic Type Refinement}
 \subsubsection*{Dynamic Type Refinement}
 The purpose of the Dynamic Type Refinement (DTR) optimization is to
 attempt to eliminate dynamic loads and stores via profile-based
@@ -41,7 +50,7 @@ works on: class, untyped\_class, and untyped\_struct all show
 significant improvements, with untyped\_class and untyped\_struct
 runtimes being more than cut in half. 
 \begin{center}
-\Includegraphics[width=3in]{dtrstats.png}
+\includegraphics[width=4in]{dtrstats.png}
 \end{center}
 
 \subsubsection*{Code Layout}
@@ -107,6 +116,10 @@ In practice this optimization garners a massive speedup on any program
 that isn't a series of print statements. This is still of limited use
 in any useful setting, as most languages that exist in the wild have
 the capacity for input to their programs.
+
+\begin{center}
+\includegraphics[width=4in]{memostats.png}
+\end{center}
 
 \subsection*{Code Statistics}
 
